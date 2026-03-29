@@ -1,26 +1,52 @@
-use nvim_oxi::{libuv::AsyncHandle, print};
+use nvim_oxi::libuv::AsyncHandle;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     client::{CompletionClient, Nothing},
-    completion::Prompt,
-    providers::ollama::{self},
+    completion::Chat,
+    providers::ollama,
+};
+use std::{
+    collections::LinkedList,
+    sync::{Arc, RwLock},
 };
 use tokio::sync::mpsc;
 
-pub struct Chat;
+pub struct ChatProcess {
+    pub logs: Arc<RwLock<LinkedList<ollama::Message>>>,
+}
 
-impl Chat {
-    pub fn send_message(message: String) {
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+impl ChatProcess {
+    pub fn new() -> Self {
+        Self {
+            logs: Arc::new(RwLock::new(LinkedList::new())),
+        }
+    }
 
+    pub fn send_message(&mut self, message: String) {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        if let Ok(mut logs) = self.logs.write() {
+            logs.push_back(ollama::Message::User {
+                content: message.clone(),
+                images: None,
+                name: None,
+            });
+        }
+
+        let logs_clone = Arc::clone(&self.logs);
         let async_handle = AsyncHandle::new(move || {
-            while let Ok(msg) = rx.try_recv() {
-                print!("{}", "received");
-                print!("{}", msg.lines().next().unwrap().to_string());
+            let msg = rx.blocking_recv().unwrap();
+            if let Ok(mut logs) = logs_clone.write() {
+                logs.push_back(ollama::Message::Assistant {
+                    content: msg,
+                    images: None,
+                    name: None,
+                    thinking: None,
+                    tool_calls: vec![],
+                });
             }
         })
         .unwrap();
-
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
@@ -33,19 +59,22 @@ impl Chat {
                     ))
                     .unwrap(),
                 );
-
                 let client = ollama::Client::builder()
                     .base_url("https://ollama.com")
                     .http_headers(headers)
                     .api_key(Nothing)
                     .build()
                     .unwrap();
-                let agent = client.agent("glm-5").build();
-                tx.send(format!(
-                    "Message received: {}",
-                    agent.prompt(message).await.unwrap()
-                ))
-                .unwrap();
+                let agent = client.agent("gemini-3-flash-preview").build();
+
+                match agent.chat(message, vec![]).await {
+                    Ok(response) => {
+                        tx.send(response).unwrap();
+                    }
+                    Err(e) => {
+                        tx.send(format!("Error: {}", e)).unwrap();
+                    }
+                }
                 async_handle.send().unwrap();
             });
         });

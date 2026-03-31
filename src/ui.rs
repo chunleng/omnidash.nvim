@@ -45,9 +45,9 @@ impl ChatWindow {
             return Ok(buffer.clone());
         }
 
-        let buffer = Arc::new(Mutex::new(Some(api::create_buf(false, true)?)));
+        let buffer = api::create_buf(false, true)?;
 
-        let buf_opts = OptionOpts::builder().build();
+        let buf_opts = OptionOpts::builder().buffer(buffer.clone()).build();
 
         api::set_option_value("buftype", "nofile", &buf_opts)?;
         api::set_option_value("buflisted", false, &buf_opts)?;
@@ -56,6 +56,7 @@ impl ChatWindow {
         api::set_option_value("filetype", "markdown", &buf_opts)?;
         api::set_option_value("modifiable", false, &buf_opts)?;
 
+        let buffer = Arc::new(Mutex::new(Some(buffer)));
         let logs = self.chat_process.logs.clone();
 
         let chat_renderer_handle = AsyncHandle::new({

@@ -15,13 +15,37 @@ use rig::providers::ollama;
 use crate::chat::ChatProcess;
 
 pub struct ChatWindow {
-    buffer: Arc<Mutex<api::Buffer>>,
+    buffer: Arc<Mutex<Option<api::Buffer>>>,
+    window: Arc<Mutex<Option<api::Window>>>,
     pub chat_process: ChatProcess,
 }
 
 impl ChatWindow {
-    pub fn new() -> OxiResult<Self> {
-        let buffer = Arc::new(Mutex::new(api::create_buf(false, true)?));
+    pub fn new() -> Self {
+        let chat_process = ChatProcess::new();
+
+        Self {
+            buffer: Arc::new(Mutex::new(None)),
+            window: Arc::new(Mutex::new(None)),
+            chat_process,
+        }
+    }
+
+    pub fn open(&mut self) -> OxiResult<()> {
+        // get_or_create_window opens a new window if window does not exists
+        self.get_or_create_window()?;
+        Ok(())
+    }
+
+    fn get_or_create_buffer(&mut self) -> OxiResult<api::Buffer> {
+        if let Ok(buffer) = self.buffer.lock()
+            && let Some(buffer) = buffer.as_ref()
+            && buffer.is_valid()
+        {
+            return Ok(buffer.clone());
+        }
+
+        let buffer = Arc::new(Mutex::new(Some(api::create_buf(false, true)?)));
 
         let buf_opts = OptionOpts::builder().build();
 
@@ -31,63 +55,92 @@ impl ChatWindow {
         api::set_option_value("filetype", "markdown", &buf_opts)?;
         api::set_option_value("modifiable", false, &buf_opts)?;
 
+        let logs = self.chat_process.logs.clone();
+
+        let chat_renderer_handle = AsyncHandle::new({
+            let buffer_clone = buffer.clone();
+            move || {
+                if let Ok(logs) = logs.read() {
+                    let content = logs
+                        .iter()
+                        .flat_map(|x| x.as_chat_lines())
+                        .collect::<Vec<_>>();
+                    let buffer_clone2 = buffer_clone.clone(); // Clone the Arc here
+
+                    schedule(move |_| {
+                        if let Ok(mut buffer) = buffer_clone2.lock()
+                            && let Some(buffer) = buffer.as_mut()
+                        {
+                            let buf_opts = OptionOpts::builder().buffer(buffer.clone()).build();
+                            let _ = api::set_option_value("modifiable", true, &buf_opts);
+                            let _ = buffer.set_lines(0.., false, content);
+                            let _ = api::set_option_value("modifiable", false, &buf_opts);
+                        }
+                    });
+                }
+            }
+        })?;
+
+        spawn({
+            let buffer_clone = buffer.clone();
+            move || {
+                loop {
+                    if let Ok(mut buffer) = buffer_clone.lock()
+                        && let Some(buffer) = buffer.as_mut()
+                        && !buffer.is_valid()
+                    {
+                        break;
+                    }
+                    sleep(Duration::from_millis(50));
+                    let _ = chat_renderer_handle.send();
+                }
+            }
+        });
+
+        self.buffer = buffer;
+        let mut window = self.get_or_create_window()?;
+        if let Ok(buffer) = self.buffer.lock()
+            && let Some(buffer) = buffer.as_ref()
+            && buffer.is_valid()
+        {
+            window.set_buf(&buffer)?;
+            Ok(buffer.clone())
+        } else {
+            todo!("fix after error is introduced")
+        }
+    }
+
+    fn get_or_create_window(&mut self) -> OxiResult<api::Window> {
+        let buffer = self.get_or_create_buffer()?;
+        if let Ok(mut win) = self.window.lock()
+            && let Some(win) = win.as_mut()
+            && win.is_valid()
+        {
+            win.set_buf(&buffer)?;
+            return Ok(win.clone());
+        }
+
         api::command("botright vsplit")?;
-        let mut window = api::get_current_win();
+        let window = Arc::new(Mutex::new(Some(api::get_current_win())));
 
         let ui_width = api::get_option_value::<i64>("columns", &OptionOpts::default())?;
         let width = (ui_width as f32 * 0.4) as i64;
         api::command(&format!("vertical resize {}", width))?;
 
-        if let Ok(buffer) = buffer.lock() {
-            window.set_buf(&buffer)?;
+        self.window = window;
+        if let Ok(mut win) = self.window.lock()
+            && let Some(win) = win.as_mut()
+            && win.is_valid()
+        {
+            let win_opts = OptionOpts::builder().win(win.clone()).build();
+            api::set_option_value("wrap", true, &win_opts)?;
+            api::set_option_value("linebreak", true, &win_opts)?;
+
+            win.set_buf(&buffer)?;
+            Ok(win.clone())
         } else {
-            todo!();
+            todo!("fix after error is introduced")
         }
-
-        let win_opts = OptionOpts::builder().win(window.clone()).build();
-
-        api::set_option_value("wrap", true, &win_opts)?;
-        api::set_option_value("linebreak", true, &win_opts)?;
-
-        let chat_process = ChatProcess::new();
-
-        Ok(Self {
-            buffer,
-            chat_process,
-        })
-    }
-
-    pub fn spawn_chat_renderer(&self) -> OxiResult<()> {
-        let logs = self.chat_process.logs.clone();
-        let buffer_clone = self.buffer.clone();
-
-        let chat_renderer_handle = AsyncHandle::new(move || {
-            if let Ok(logs) = logs.read() {
-                let content = logs
-                    .iter()
-                    .flat_map(|x| x.as_chat_lines())
-                    .collect::<Vec<_>>();
-                let buffer_clone2 = buffer_clone.clone(); // Clone the Arc here
-
-                schedule(move |_| {
-                    if let Ok(mut buffer) = buffer_clone2.lock() {
-                        let buf_opts = OptionOpts::builder().buffer(buffer.clone()).build();
-                        api::set_option_value("modifiable", true, &buf_opts).unwrap();
-                        buffer.set_lines(0.., false, content).unwrap();
-                        api::set_option_value("modifiable", false, &buf_opts).unwrap();
-                    }
-                });
-            }
-        })?;
-
-        spawn(move || {
-            loop {
-                sleep(Duration::from_millis(50));
-                chat_renderer_handle.send().unwrap();
-            }
-        });
-
-        Ok(())
     }
 }
 

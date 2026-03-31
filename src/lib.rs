@@ -1,7 +1,6 @@
-use nvim_oxi::{
-    Dictionary, Function, Object, Result as OxiResult,
-    api::{notify, types::LogLevel},
-};
+use std::sync::{Arc, Mutex};
+
+use nvim_oxi::{Dictionary, Function, Object, Result as OxiResult};
 
 use crate::ui::ChatWindow;
 
@@ -10,20 +9,29 @@ mod ui;
 
 #[nvim_oxi::plugin]
 fn omnidash() -> OxiResult<Dictionary> {
-    let chat_window = match ChatWindow::new() {
-        Ok(win) => win,
-        Err(e) => {
-            _ = notify(
-                "error when trying to create a new chat",
-                LogLevel::Error,
-                &Dictionary::new(),
-            );
-            return Err(e);
-        }
-    };
-    chat_window.spawn_chat_renderer()?;
-    let mut chat_process = chat_window.chat_process;
-    let chat_fn = Function::from_fn_mut(move |x| chat_process.send_message(x));
+    let chat_window = Arc::new(Mutex::new(ChatWindow::new()));
 
-    Ok(Dictionary::from_iter([("chat", Object::from(chat_fn))]))
+    let chat_fn = Function::from_fn_mut({
+        let win_clone = chat_window.clone();
+        move |x| {
+            if let Ok(mut win) = win_clone.lock() {
+                let _ = win.open();
+                win.chat_process.send_message(x)
+            }
+        }
+    });
+
+    let open_fn = Function::from_fn_mut({
+        let win_clone = chat_window.clone();
+        move |()| {
+            if let Ok(mut win) = win_clone.lock() {
+                let _ = win.open();
+            }
+        }
+    });
+
+    let mut module = Dictionary::new();
+    module.insert("chat", Object::from(chat_fn));
+    module.insert("open", Object::from(open_fn));
+    Ok(module)
 }

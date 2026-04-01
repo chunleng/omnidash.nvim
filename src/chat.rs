@@ -6,12 +6,12 @@ use nvim_oxi::{
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     OneOrMany,
-    agent::{MultiTurnStreamItem, Text},
+    agent::Text,
     client::{CompletionClient, Nothing},
-    completion::{self},
+    completion::{self, GetTokenUsage, Usage},
     message::{self, UserContent},
     providers::ollama::{self},
-    streaming::{StreamedAssistantContent, StreamingChat},
+    streaming::{StreamedAssistantContent, StreamingCompletion},
 };
 use std::{
     collections::LinkedList,
@@ -20,12 +20,14 @@ use std::{
 
 pub struct ChatProcess {
     pub logs: Arc<RwLock<LinkedList<ollama::Message>>>,
+    pub usage: Arc<RwLock<Option<Usage>>>,
 }
 
 impl ChatProcess {
     pub fn new() -> Self {
         Self {
             logs: Arc::new(RwLock::new(LinkedList::new())),
+            usage: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -39,6 +41,7 @@ impl ChatProcess {
         }
 
         let logs_clone = Arc::clone(&self.logs);
+        let usage_clone = Arc::clone(&self.usage);
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
@@ -88,7 +91,13 @@ impl ChatProcess {
                     todo!("fix after error is introduced")
                 }
 
-                let mut stream = agent.stream_chat(message, chat_history).await;
+                let mut stream = agent
+                    .stream_completion(message, chat_history)
+                    .await
+                    .unwrap()
+                    .stream()
+                    .await
+                    .unwrap();
                 let mut full_response = String::new();
                 if let Ok(mut logs) = logs_clone.write() {
                     logs.push_back(ollama::Message::Assistant {
@@ -101,9 +110,7 @@ impl ChatProcess {
                 }
                 while let Some(chunk) = stream.next().await {
                     match chunk {
-                        Ok(MultiTurnStreamItem::StreamAssistantItem(
-                            StreamedAssistantContent::Text(text_struct),
-                        )) => {
+                        Ok(StreamedAssistantContent::Text(text_struct)) => {
                             full_response.push_str(&text_struct.text);
                             if let Ok(mut logs) = logs_clone.write() {
                                 // TODO make this more efficient
@@ -115,6 +122,13 @@ impl ChatProcess {
                                     thinking: None,
                                     tool_calls: vec![],
                                 });
+                            }
+                        }
+                        Ok(StreamedAssistantContent::Final(final_response)) => {
+                            if let Some(usage) = final_response.token_usage() {
+                                if let Ok(mut usage_lock) = usage_clone.write() {
+                                    *usage_lock = Some(usage);
+                                }
                             }
                         }
                         Ok(_) => {}

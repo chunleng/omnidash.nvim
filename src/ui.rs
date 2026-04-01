@@ -69,12 +69,26 @@ impl ChatWindow {
             let chat_renderer_handle = AsyncHandle::new({
                 let buffer_clone = self.buffer.clone();
                 let window_clone = self.window.clone();
+                let usage_clone = self.chat_process.usage.clone();
                 move || {
                     if let Ok(logs) = logs.read() {
-                        let content = logs
+                        let mut content = logs
                             .iter()
                             .flat_map(|x| x.as_chat_lines())
                             .collect::<Vec<_>>();
+
+                        if let Ok(usage) = usage_clone.read()
+                            && let Some(usage) = usage.as_ref()
+                        {
+                            content.push(format!(
+                                "{} 󰕒 | {} 󰇚 | {}  | {} total",
+                                usage.input_tokens,
+                                usage.output_tokens,
+                                usage.cached_input_tokens,
+                                usage.total_tokens
+                            ));
+                        }
+
                         let buffer_clone2 = buffer_clone.clone();
                         let window_clone2 = window_clone.clone();
 

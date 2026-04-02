@@ -160,8 +160,8 @@ impl ChatWindow {
         if let Ok(mut win) = self.window.lock()
             && let Some(win) = win.as_mut()
             && win.is_valid()
+            && win.get_buf()? == buffer
         {
-            win.set_buf(&buffer)?;
             return Ok(win.clone());
         }
 
@@ -177,11 +177,11 @@ impl ChatWindow {
             && let Some(win) = win.as_mut()
             && win.is_valid()
         {
+            win.set_buf(&buffer)?;
             let win_opts = OptionOpts::builder().win(win.clone()).build();
             api::set_option_value("wrap", true, &win_opts)?;
             api::set_option_value("linebreak", true, &win_opts)?;
-
-            win.set_buf(&buffer)?;
+            api::set_option_value("winfixbuf", true, &win_opts)?;
             Ok(win.clone())
         } else {
             todo!("fix after error is introduced")

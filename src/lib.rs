@@ -8,6 +8,7 @@ use nvim_oxi::{
 use crate::ui::ChatWindow;
 
 mod chat;
+mod tools;
 mod ui;
 
 #[nvim_oxi::plugin]

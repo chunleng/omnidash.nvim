@@ -947,6 +947,8 @@ dependencies = [
  "nvim-oxi",
  "reqwest",
  "rig-core",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

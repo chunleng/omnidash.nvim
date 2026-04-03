@@ -1,3 +1,4 @@
+use crate::tools::ReadFile;
 use futures::stream::StreamExt;
 use nvim_oxi::{
     Dictionary,
@@ -6,12 +7,12 @@ use nvim_oxi::{
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     OneOrMany,
-    agent::Text,
+    agent::{MultiTurnStreamItem, Text},
     client::{CompletionClient, Nothing},
     completion::{self, GetTokenUsage, Usage},
     message::{self, UserContent},
     providers::ollama::{self},
-    streaming::{StreamedAssistantContent, StreamingCompletion},
+    streaming::{StreamedAssistantContent, StreamingChat},
 };
 use std::{
     collections::LinkedList,
@@ -60,7 +61,14 @@ impl ChatProcess {
                     .api_key(Nothing)
                     .build()
                     .unwrap();
-                let agent = client.agent("gemini-3-flash-preview").build();
+                let agent = client
+                    // TODO https://github.com/ollama/ollama/issues/14567
+                    // gemini-3-flash-preview tools does not work because it requires additional
+                    // `thought_signature`
+                    // .agent("gemini-3-flash-preview")
+                    .agent("glm-5")
+                    .tool(ReadFile)
+                    .build();
 
                 let chat_history;
                 if let Ok(logs) = logs_clone.read() {
@@ -91,13 +99,7 @@ impl ChatProcess {
                     todo!("fix after error is introduced")
                 }
 
-                let mut stream = agent
-                    .stream_completion(message, chat_history)
-                    .await
-                    .unwrap()
-                    .stream()
-                    .await
-                    .unwrap();
+                let mut stream = agent.stream_chat(message, chat_history).multi_turn(3).await;
                 let mut full_response = String::new();
                 if let Ok(mut logs) = logs_clone.write() {
                     logs.push_back(ollama::Message::Assistant {
@@ -108,9 +110,12 @@ impl ChatProcess {
                         tool_calls: vec![],
                     });
                 }
+                let mut tool_calls = vec![];
                 while let Some(chunk) = stream.next().await {
                     match chunk {
-                        Ok(StreamedAssistantContent::Text(text_struct)) => {
+                        Ok(MultiTurnStreamItem::StreamAssistantItem(
+                            StreamedAssistantContent::Text(text_struct),
+                        )) => {
                             full_response.push_str(&text_struct.text);
                             if let Ok(mut logs) = logs_clone.write() {
                                 // TODO make this more efficient
@@ -120,11 +125,28 @@ impl ChatProcess {
                                     images: None,
                                     name: None,
                                     thinking: None,
-                                    tool_calls: vec![],
+                                    tool_calls: tool_calls.clone(),
                                 });
                             }
                         }
-                        Ok(StreamedAssistantContent::Final(final_response)) => {
+                        Ok(MultiTurnStreamItem::StreamAssistantItem(
+                            StreamedAssistantContent::ToolCall { tool_call, .. },
+                        )) => {
+                            tool_calls.push(tool_call.clone().into());
+                            if let Ok(mut logs) = logs_clone.write() {
+                                logs.pop_back();
+                                logs.push_back(ollama::Message::Assistant {
+                                    content: full_response.clone(),
+                                    images: None,
+                                    name: None,
+                                    thinking: None,
+                                    tool_calls: tool_calls.clone(),
+                                });
+                            }
+                        }
+                        Ok(MultiTurnStreamItem::StreamAssistantItem(
+                            StreamedAssistantContent::Final(final_response),
+                        )) => {
                             if let Some(usage) = final_response.token_usage() {
                                 if let Ok(mut usage_lock) = usage_clone.write() {
                                     *usage_lock = Some(usage);
@@ -133,11 +155,13 @@ impl ChatProcess {
                         }
                         Ok(_) => {}
                         Err(e) => {
-                            let _ = notify(
-                                &format!("Stream error: {}", e),
-                                LogLevel::Error,
-                                &Dictionary::new(),
-                            );
+                            let lines = format!("{}", e)
+                                .lines()
+                                .map(|x| x.to_string())
+                                .collect::<Vec<String>>();
+                            for line in lines {
+                                let _ = notify(&line, LogLevel::Error, &Dictionary::new());
+                            }
                             break;
                         }
                     }

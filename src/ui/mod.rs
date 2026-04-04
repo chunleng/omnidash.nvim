@@ -10,7 +10,7 @@ use nvim_oxi::{
     api::{
         self,
         opts::{CreateAugroupOpts, CreateAutocmdOpts, OptionOpts, SetKeymapOpts},
-        types::Mode,
+        types::{LogLevel, Mode},
     },
     libuv::AsyncHandle,
     schedule,
@@ -22,6 +22,7 @@ use crate::{
     ui::components::{
         FixedBufferVimWindow, FixedBufferVimWindowOption, Keymap, SplitWindowOption, WindowOption,
     },
+    utils::notify,
 };
 
 pub struct ChatWindow {
@@ -47,7 +48,27 @@ impl ChatWindow {
         Ok(())
     }
 
-    pub fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferVimWindow> {
+    pub fn send(&mut self) -> OxiResult<()> {
+        if let Some(mut input_win_buffer) = self.get_or_create_input_window()?.get_buffer() {
+            let lines = input_win_buffer.get_lines(0.., false)?;
+            let message = lines
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string();
+            if message.is_empty() {
+                notify("please enter your message before sending", LogLevel::Error);
+            } else {
+                self.chat_process.send_message(message);
+                let _ = input_win_buffer.set_lines(0.., false, Vec::<String>::new());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferVimWindow> {
         if let Ok(win) = self.input_window.lock()
             && let Some(win) = win.as_ref()
             && win.get_buffer().is_some()
@@ -126,7 +147,7 @@ impl ChatWindow {
         }
     }
 
-    pub fn get_or_create_output_window(&mut self) -> OxiResult<FixedBufferVimWindow> {
+    fn get_or_create_output_window(&mut self) -> OxiResult<FixedBufferVimWindow> {
         if let Ok(win) = self.output_window.lock()
             && let Some(win) = win.as_ref()
             && win.get_buffer().is_some()

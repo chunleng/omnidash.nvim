@@ -1,14 +1,15 @@
-use crate::{tools::ReadFile, utils::notify};
+use crate::{
+    clients::{OllamaProviderConfig, SupportedModels, get_agent},
+    tools::ReadFile,
+    utils::notify,
+};
 use futures::stream::StreamExt;
 use nvim_oxi::api::types::LogLevel;
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     OneOrMany,
     agent::MultiTurnStreamItem,
-    client::{CompletionClient, Nothing},
     completion::{GetTokenUsage, Usage},
     message::{AssistantContent, Message, ToolCall, UserContent},
-    providers::ollama,
     streaming::{StreamedAssistantContent, StreamedUserContent, StreamingChat},
 };
 use std::{
@@ -41,30 +42,22 @@ impl ChatProcess {
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    AUTHORIZATION,
-                    HeaderValue::from_str(&format!(
-                        "Bearer {}",
-                        std::env::var("OLLAMA_API_KEY").expect("OLLAMA_API_KEY must be set")
-                    ))
-                    .unwrap(),
+                let agent = get_agent(
+                    SupportedModels::Ollama {
+                        config: OllamaProviderConfig {
+                            base_url: "https://ollama.com".to_string(),
+                            ..Default::default()
+                        },
+                        model_name: "glm-5.1".to_string(),
+                    },
+                    Some(
+                        "Answer in the fewest words possible. Use abbreviations, symbols, and
+                        fragments. Omit articles, conjunctions, and filler. Be precise, not
+                        verbose."
+                            .to_string(),
+                    ),
+                    vec![ReadFile],
                 );
-                let client = ollama::Client::builder()
-                    .base_url("https://ollama.com")
-                    .http_headers(headers)
-                    .api_key(Nothing)
-                    .build()
-                    .unwrap();
-                let agent = client
-                    // TODO https://github.com/ollama/ollama/issues/14567
-                    // gemini-3-flash-preview tools does not work because it requires additional
-                    // `thought_signature`
-                    // .agent("gemini-3-flash-preview")
-                    .agent("glm-5")
-                    .tool(ReadFile)
-                    .build();
-
                 let chat_history;
                 if let Ok(logs) = logs_clone.read() {
                     chat_history = logs.iter().cloned().collect::<Vec<_>>();

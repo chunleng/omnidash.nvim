@@ -5,6 +5,7 @@ use nvim_oxi::{Dictionary, Function, Object, Result as OxiResult};
 use crate::{keymap::create_lua_keymap_module, ui::ChatWindow};
 
 mod chat;
+mod clients;
 mod keymap;
 mod tools;
 mod ui;

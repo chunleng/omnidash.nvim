@@ -15,7 +15,10 @@ use nvim_oxi::{
     libuv::AsyncHandle,
     schedule,
 };
-use rig::providers::ollama;
+use rig::{
+    agent::Text,
+    message::{AssistantContent, Message, ToolCall, ToolResult, UserContent},
+};
 
 use crate::{
     chat::ChatProcess,
@@ -286,36 +289,50 @@ trait DisplayAsChat {
     fn as_chat_string(&self) -> Option<String>;
 }
 
-impl DisplayAsChat for ollama::Message {
+impl DisplayAsChat for Message {
     fn as_chat_string(&self) -> Option<String> {
         match self {
-            ollama::Message::User { content, .. } => {
-                Some(format!("# User\n\n{}\n\n---\n", content.to_string()))
-            }
-            ollama::Message::Assistant {
-                content,
-                tool_calls,
-                ..
-            } => {
-                let mut output = content.to_string();
-                let tools = tool_calls
+            Message::User { content, .. } => Some(
+                content
                     .iter()
-                    .map(|x| format!("[calling tool] `{}`", x.function.name.clone()))
+                    .filter_map(|x| match x {
+                        UserContent::Text(Text { text }) => {
+                            Some(format!("# User\n\n{}\n\n---\n", text.to_string()))
+                        }
+                        UserContent::ToolResult(ToolResult { call_id, .. }) => {
+                            // TODO We are unable to fetch the tool call if we are formatting by
+                            // Message.
+                            // In the future version, we should relook at message formatting again
+                            let output = call_id.clone().unwrap_or("unknown call".to_string());
+                            Some(format!("# Tool\n\n[tool result] id: {}\n\n---\n", output))
+                        }
+                        _ => None,
+                    })
                     .collect::<Vec<_>>()
-                    .join("\n");
-                if !tools.is_empty() {
-                    if content.is_empty() {
-                        output = tools;
-                    } else {
-                        output = format!("{}\n\n{}", output, tools);
+                    .join("\n"),
+            ),
+            Message::Assistant { content, .. } => {
+                let mut output = vec![];
+                for c in content.iter() {
+                    match c {
+                        AssistantContent::Text(Text { text }) => {
+                            if !text.is_empty() {
+                                output.push(text.to_string());
+                            }
+                        }
+                        AssistantContent::ToolCall(ToolCall { function, id, .. }) => {
+                            output.push(format!(
+                                "[calling tool] id:{} `{}`",
+                                id,
+                                function.name.clone()
+                            ));
+                        }
+                        _ => {}
                     }
                 }
-                Some(format!("# Assistant\n\n{}\n\n---\n", output))
+                Some(format!("# Assistant\n\n{}\n\n---\n", output.join("\n")))
             }
-            ollama::Message::System { .. } => None,
-            ollama::Message::ToolResult { name, .. } => {
-                Some(format!("# Tool\n\n[tool result] `{}`\n\n---\n", name))
-            }
+            _ => None,
         }
     }
 }

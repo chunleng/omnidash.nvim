@@ -4,11 +4,11 @@ use nvim_oxi::api::types::LogLevel;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     OneOrMany,
-    agent::{MultiTurnStreamItem, Text},
+    agent::MultiTurnStreamItem,
     client::{CompletionClient, Nothing},
-    completion::{self, GetTokenUsage, Usage},
-    message::{self, ToolResult, ToolResultContent, UserContent},
-    providers::ollama::{self, ToolCall},
+    completion::{GetTokenUsage, Usage},
+    message::{AssistantContent, Message, ToolCall, UserContent},
+    providers::ollama,
     streaming::{StreamedAssistantContent, StreamedUserContent, StreamingChat},
 };
 use std::{
@@ -17,7 +17,7 @@ use std::{
 };
 
 pub struct ChatProcess {
-    pub logs: Arc<RwLock<LinkedList<ollama::Message>>>,
+    pub logs: Arc<RwLock<LinkedList<Message>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
 }
 
@@ -31,10 +31,8 @@ impl ChatProcess {
 
     pub fn send_message(&mut self, message: String) {
         if let Ok(mut logs) = self.logs.write() {
-            logs.push_back(ollama::Message::User {
-                content: message.clone(),
-                images: None,
-                name: None,
+            logs.push_back(Message::User {
+                content: OneOrMany::one(UserContent::text(message.clone())),
             });
         }
 
@@ -69,51 +67,7 @@ impl ChatProcess {
 
                 let chat_history;
                 if let Ok(logs) = logs_clone.read() {
-                    chat_history = logs
-                        .iter()
-                        .cloned()
-                        .filter_map(|x| match x {
-                            ollama::Message::Assistant {
-                                content,
-                                tool_calls,
-                                ..
-                            } => {
-                                let content = match content.is_empty() {
-                                    true => OneOrMany::many(tool_calls.iter().map(|x| {
-                                        message::AssistantContent::tool_call(
-                                            "".to_string(),
-                                            x.function.name.clone(),
-                                            x.function.arguments.clone(),
-                                        )
-                                    })),
-                                    false => {
-                                        OneOrMany::many([message::AssistantContent::text(content)])
-                                    }
-                                }
-                                .ok()?;
-                                Some(completion::Message::Assistant { id: None, content })
-                            }
-                            ollama::Message::User { content, .. } => {
-                                Some(completion::Message::User {
-                                    content: OneOrMany::one(UserContent::Text(Text::from(content))),
-                                })
-                            }
-                            ollama::Message::ToolResult { content, .. } => {
-                                Some(completion::Message::User {
-                                    content: OneOrMany::one(UserContent::ToolResult(ToolResult {
-                                        id: "".to_string(),
-                                        call_id: None,
-                                        content: OneOrMany::one(message::ToolResultContent::text(
-                                            content,
-                                        )),
-                                    })),
-                                })
-                            }
-                            ollama::Message::System { content, .. } => {
-                                Some(completion::Message::System { content })
-                            }
-                        })
-                        .collect::<Vec<_>>();
+                    chat_history = logs.iter().cloned().collect::<Vec<_>>();
                 } else {
                     todo!("fix after error is introduced")
                 }
@@ -121,12 +75,9 @@ impl ChatProcess {
                 let mut stream = agent.stream_chat(message, chat_history).multi_turn(3).await;
                 let mut full_response = String::new();
                 if let Ok(mut logs) = logs_clone.write() {
-                    logs.push_back(ollama::Message::Assistant {
-                        content: full_response.clone(),
-                        images: None,
-                        name: None,
-                        thinking: None,
-                        tool_calls: vec![],
+                    logs.push_back(Message::Assistant {
+                        id: None,
+                        content: OneOrMany::one(AssistantContent::text(full_response.clone())),
                     });
                 }
                 let mut tools_lookup: HashMap<String, ToolCall> = HashMap::new();
@@ -136,34 +87,24 @@ impl ChatProcess {
                             StreamedUserContent::ToolResult {
                                 tool_result,
                                 internal_call_id,
+                                ..
                             },
                         )) => {
                             if let Ok(mut logs) = logs_clone.write() {
-                                logs.push_back(ollama::Message::ToolResult {
-                                    name: tools_lookup
-                                        .get(&internal_call_id)
-                                        .map(|x| x.function.name.clone())
-                                        .unwrap_or("unknown tool".to_string()),
-                                    content: tool_result
-                                        .content
-                                        .into_iter()
-                                        .filter_map(|x| match x {
-                                            ToolResultContent::Text(Text { text }) => {
-                                                Some(text.to_string())
-                                            }
-                                            _ => None,
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join("\n"),
+                                logs.push_back(Message::User {
+                                    content: OneOrMany::one(UserContent::tool_result_with_call_id(
+                                        tool_result.id,
+                                        internal_call_id,
+                                        tool_result.content,
+                                    )),
                                 });
                                 tools_lookup = HashMap::new();
                                 full_response = "".to_string();
-                                logs.push_back(ollama::Message::Assistant {
-                                    content: full_response.clone(),
-                                    images: None,
-                                    name: None,
-                                    thinking: None,
-                                    tool_calls: vec![],
+                                logs.push_back(Message::Assistant {
+                                    id: None,
+                                    content: OneOrMany::one(AssistantContent::text(
+                                        full_response.clone(),
+                                    )),
                                 });
                             }
                         }
@@ -174,12 +115,17 @@ impl ChatProcess {
                             if let Ok(mut logs) = logs_clone.write() {
                                 // TODO make this more efficient
                                 logs.pop_back();
-                                logs.push_back(ollama::Message::Assistant {
-                                    content: full_response.clone(),
-                                    images: None,
-                                    name: None,
-                                    thinking: None,
-                                    tool_calls: tools_lookup.values().cloned().collect::<Vec<_>>(),
+                                let mut content =
+                                    vec![AssistantContent::text(full_response.clone())];
+                                content.extend(
+                                    tools_lookup
+                                        .values()
+                                        .cloned()
+                                        .map(|tc: ToolCall| AssistantContent::ToolCall(tc)),
+                                );
+                                logs.push_back(Message::Assistant {
+                                    id: None,
+                                    content: OneOrMany::many(content).unwrap(),
                                 });
                             }
                         }
@@ -189,15 +135,23 @@ impl ChatProcess {
                                 internal_call_id,
                             },
                         )) => {
-                            tools_lookup.insert(internal_call_id, tool_call.into());
+                            tools_lookup.insert(internal_call_id.clone(), tool_call.into());
                             if let Ok(mut logs) = logs_clone.write() {
                                 logs.pop_back();
-                                logs.push_back(ollama::Message::Assistant {
-                                    content: full_response.clone(),
-                                    images: None,
-                                    name: None,
-                                    thinking: None,
-                                    tool_calls: tools_lookup.values().cloned().collect::<Vec<_>>(),
+                                let mut content =
+                                    vec![AssistantContent::text(full_response.clone())];
+                                content.extend(tools_lookup.values().cloned().map(
+                                    move |tc: ToolCall| {
+                                        AssistantContent::tool_call(
+                                            internal_call_id.clone(),
+                                            tc.function.name,
+                                            tc.function.arguments,
+                                        )
+                                    },
+                                ));
+                                logs.push_back(Message::Assistant {
+                                    id: None,
+                                    content: OneOrMany::many(content).unwrap(),
                                 });
                             }
                         }

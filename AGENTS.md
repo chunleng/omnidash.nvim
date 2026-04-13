@@ -1,6 +1,6 @@
-# Omnidash
+# Tenon
 
-Omnidash is a neovim plugin written in purely Rust, using `nvim-oxi`, a safe,
+Tenon is a neovim plugin written in purely Rust, using `nvim-oxi`, a safe,
 idiomatic Rust bindings to the Neovim text editor's API. The plugin is an
 Agentic chat tool that can respond to request and call relevant tools to do so.
 

@@ -1,3 +1,3 @@
-# OmniDash.nvim
+# Tenon.nvim
 
-Your omnipresent AI companion for Vim. Dash through ideas, debug with dialogue.
+Fit agents to task, task to code.

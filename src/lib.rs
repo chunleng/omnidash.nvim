@@ -12,7 +12,7 @@ mod ui;
 mod utils;
 
 #[nvim_oxi::plugin]
-fn omnidash() -> OxiResult<Dictionary> {
+fn tenon() -> OxiResult<Dictionary> {
     let chat_window = Arc::new(Mutex::new(ChatWindow::new()));
 
     let open_fn = Function::from_fn_mut({

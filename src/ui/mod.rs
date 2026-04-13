@@ -106,13 +106,13 @@ impl ChatWindow {
                     Keymap {
                         modes: vec![Mode::Insert, Mode::Normal],
                         lhs: "<c-cr>".to_string(),
-                        rhs: "<cmd>lua require('omnidash').keymap.send()<cr>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.send()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                     Keymap {
                         modes: vec![Mode::Normal],
                         lhs: "q".to_string(),
-                        rhs: "<cmd>lua require('omnidash').keymap.close()<cr>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.close()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                 ],
@@ -120,7 +120,7 @@ impl ChatWindow {
             })?;
 
             let augroup = api::create_augroup(
-                "OmnidashInOutLinkedWindows",
+                "TenonInOutLinkedWindows",
                 &CreateAugroupOpts::builder().clear(true).build(),
             )?;
             api::create_autocmd(
@@ -189,7 +189,7 @@ impl ChatWindow {
                 buf_keymaps: vec![Keymap {
                     modes: vec![Mode::Normal],
                     lhs: "q".to_string(),
-                    rhs: "<cmd>lua require('omnidash').keymap.close()<cr>".to_string(),
+                    rhs: "<cmd>lua require('tenon').keymap.close()<cr>".to_string(),
                     opts: SetKeymapOpts::default(),
                 }],
                 ..Default::default()

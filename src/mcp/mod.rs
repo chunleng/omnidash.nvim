@@ -131,8 +131,18 @@ if not mcphub then
     return {{error = "MCPHub instance not available"}}
 end
 local args = vim.fn.json_decode("{}")
+local shared = require("mcphub.extensions.shared")
+local params = shared.parse_params({{server_name = "{}", tool_name = "{}", tool_input = args}}, "use_mcp_tool")
+if not params.is_auto_approved_in_server then
+    local args_str = vim.fn.json_encode(params.arguments)
+    local choice = vim.fn.confirm("Run " .. params.server_name .. ":" .. params.tool_name .. "?\nArgs: " .. args_str, "&Yes\n&No", 1)
+    if choice ~= 1 then
+        return {{error = "User denied the tool run"}}
+    end
+end
+
 local opts = {{parse_response = true}}
-local response, err = mcphub:call_tool("{}", "{}", args, opts)
+local response, err = mcphub:call_tool(params.server_name, params.tool_name, params.arguments, opts)
 
 if err and err ~= "" then
     return {{error = err}}

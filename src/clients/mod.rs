@@ -1,7 +1,7 @@
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     agent::Agent,
-    client::{CompletionClient, Nothing},
+    client::{CompletionClient, Nothing, ProviderClient},
     message::Message,
     providers::{gemini, ollama, openai},
     streaming::StreamingChat,
@@ -22,12 +22,16 @@ pub enum SupportedModels {
         config: OpenAIProviderConfig,
         model_name: String,
     },
+    Bedrock {
+        model_name: String,
+    },
 }
 
 pub enum ChatAgent {
     Ollama(Agent<ollama::CompletionModel>),
     Gemini(Agent<gemini::CompletionModel>),
     OpenAI(Agent<openai::CompletionModel>),
+    Bedrock(Agent<rig_bedrock::completion::CompletionModel>),
 }
 
 pub enum ChatStream {
@@ -54,6 +58,15 @@ pub enum ChatStream {
             'static,
             Result<
                 rig::agent::MultiTurnStreamItem<openai::streaming::StreamingCompletionResponse>,
+                rig::agent::StreamingError,
+            >,
+        >,
+    ),
+    Bedrock(
+        futures::stream::BoxStream<
+            'static,
+            Result<
+                rig::agent::MultiTurnStreamItem<rig_bedrock::streaming::BedrockStreamingResponse>,
                 rig::agent::StreamingError,
             >,
         >,
@@ -133,6 +146,10 @@ impl ChatStream {
                 Ok(item) => Ok(convert_stream_item!(item)),
                 Err(e) => Err(e),
             }),
+            ChatStream::Bedrock(stream) => stream.next().await.map(|result| match result {
+                Ok(item) => Ok(convert_stream_item!(item)),
+                Err(e) => Err(e),
+            }),
         }
     }
 }
@@ -159,6 +176,12 @@ impl ChatAgent {
                     .multi_turn(multi_turn)
                     .await,
             ),
+            ChatAgent::Bedrock(agent) => ChatStream::Bedrock(
+                agent
+                    .stream_chat(message, history)
+                    .multi_turn(multi_turn)
+                    .await,
+            ),
         }
     }
 }
@@ -177,6 +200,9 @@ pub fn get_agent(
         }
         SupportedModels::OpenAI { config, model_name } => {
             ChatAgent::OpenAI(get_openai_agent(config, model_name, preamble, tools))
+        }
+        SupportedModels::Bedrock { model_name } => {
+            ChatAgent::Bedrock(get_bedrock_agent(model_name, preamble, tools))
         }
     }
 }
@@ -297,6 +323,33 @@ fn get_openai_agent(
         .build()
         .unwrap()
         .completions_api();
+    let mut agent = client.agent(model_name);
+    if let Some(p) = preamble {
+        agent = agent.preamble(&p);
+    }
+    let agent = agent
+        .tools(
+            tools
+                .into_iter()
+                .map(|t| Box::new(t) as Box<dyn ToolDyn>)
+                .collect(),
+        )
+        .build();
+
+    agent
+}
+
+fn get_bedrock_agent(
+    model_name: String,
+    preamble: Option<String>,
+    tools: Vec<impl Tool + 'static>,
+) -> Agent<rig_bedrock::completion::CompletionModel> {
+    // There's no config provider because bedrock is configured solely by env. Following are some
+    // environment that you can override to provide the necessary configuration to bedrock (apart
+    // from the standard env like AWS_REGION)
+    // - AWS_ENDPOINT_URL_BEDROCK_RUNTIME
+    // - AWS_BEARER_TOKEN_BEDROCK
+    let client = rig_bedrock::client::Client::from_env();
     let mut agent = client.agent(model_name);
     if let Some(p) = preamble {
         agent = agent.preamble(&p);

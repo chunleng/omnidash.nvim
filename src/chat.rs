@@ -10,6 +10,7 @@ use rig::{
     completion::Usage,
     message::{AssistantContent, Image, Message, ToolResult, ToolResultContent, UserContent},
     tool::ToolDyn,
+    tools::ThinkTool,
 };
 use serde_json::Value;
 use std::{
@@ -147,7 +148,8 @@ impl ChatProcess {
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                let mut tools: Vec<Box<dyn ToolDyn>> = vec![Box::new(ReadFile)];
+                let mut tools: Vec<Box<dyn ToolDyn>> =
+                    vec![Box::new(ReadFile), Box::new(ThinkTool)];
                 if let Ok(x) = McpHubCaller::from_mcp_tools() {
                     tools.append(
                         &mut x

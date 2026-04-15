@@ -48,6 +48,8 @@ pub struct FixedBufferVimWindowOption {
     pub wrap: bool,
     pub line_break: bool,
     pub undo_levels: isize,
+    pub number: bool,
+    pub relative_number: bool,
     pub sign_column: String,
     pub buf_keymaps: Vec<Keymap>,
     pub window_option: WindowOption,
@@ -65,6 +67,8 @@ impl Default for FixedBufferVimWindowOption {
             line_break: true,
             undo_levels: 1000,
             sign_column: "auto".to_string(),
+            number: true,
+            relative_number: true,
             buf_keymaps: vec![],
             window_option: WindowOption::CenteredFloat {
                 height: 0.6,
@@ -170,6 +174,8 @@ impl FixedBufferVimWindow {
         api::set_option_value("wrap", option.wrap, &win_opts)?;
         api::set_option_value("linebreak", option.line_break, &win_opts)?;
         api::set_option_value("signcolumn", option.sign_column, &win_opts)?;
+        api::set_option_value("number", option.number, &win_opts)?;
+        api::set_option_value("relativenumber", option.relative_number, &win_opts)?;
 
         Ok(Self { buffer, window })
     }

@@ -201,7 +201,9 @@ impl ChatWindow {
                     opts: SetKeymapOpts::default(),
                 }],
                 undo_levels: -1,
-                sign_column: "yes".to_string(),
+                sign_column: "yes:3".to_string(),
+                number: false,
+                relative_number: false,
                 ..Default::default()
             })?;
             self.output_window = Arc::new(Mutex::new(Some(win.clone())));

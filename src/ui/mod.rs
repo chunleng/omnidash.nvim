@@ -1,6 +1,6 @@
 mod components;
 use std::{
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, RwLock, mpsc},
     thread::{sleep, spawn},
     time::Duration,
 };
@@ -26,6 +26,15 @@ use crate::{
     },
     utils::notify,
 };
+
+#[derive(Debug, Default)]
+struct RenderState {
+    /// Index of the first log entry that needs (re-)rendering.
+    /// All entries before this index are frozen (their buffer lines won't change).
+    next_render_from: usize,
+    /// Number of buffer lines occupied by frozen entries (0..next_render_from).
+    frozen_line_count: usize,
+}
 
 pub struct ChatWindow {
     output_window: Arc<Mutex<Option<FixedBufferVimWindow>>>,
@@ -197,16 +206,37 @@ impl ChatWindow {
             self.output_window = Arc::new(Mutex::new(Some(win.clone())));
 
             let (tx, rx) = mpsc::channel();
+            let render_state = Arc::new(RwLock::new(RenderState::default()));
             let chat_renderer_handle = AsyncHandle::new({
                 let output_window = win.clone();
                 let logs = self.chat_process.logs.clone();
                 let usage_clone = self.chat_process.usage.clone();
+                let render_state_clone = render_state.clone();
                 move || {
                     if let Ok(logs) = logs.read() {
-                        let mut content = logs
+                        let log_count = logs.len();
+
+                        let (start_idx, frozen_line_count) = {
+                            let state = render_state_clone.read().ok();
+                            let next_render_from = state.as_ref().map_or(0, |s| s.next_render_from);
+                            let frozen = state.as_ref().map_or(0, |s| s.frozen_line_count);
+                            let clamped_start = if log_count == 0 {
+                                0
+                            } else {
+                                next_render_from.min(log_count - 1)
+                            };
+                            (clamped_start, if log_count == 0 { 0 } else { frozen })
+                        };
+
+                        // Collect entries to render (from start_idx onwards)
+                        let entry_lines: Vec<Vec<String>> = logs
                             .iter()
-                            .flat_map(|x| x.as_chat_lines())
-                            .collect::<Vec<_>>();
+                            .skip(start_idx)
+                            .map(|x| x.as_chat_lines())
+                            .collect();
+
+                        let mut content: Vec<String> =
+                            entry_lines.iter().flatten().cloned().collect();
 
                         if let Ok(usage) = usage_clone.read()
                             && let Some(usage) = usage.as_ref()
@@ -220,10 +250,24 @@ impl ChatWindow {
                             ));
                         }
 
+                        // Compute new render state for after buffer update
+                        let (new_next_render_from, new_frozen_line_count) = if log_count == 0 {
+                            (0, 0)
+                        } else {
+                            // Entries that become frozen: start_idx..log_count-1 (exclusive of last)
+                            let newly_frozen_count = log_count - 1 - start_idx;
+                            let newly_frozen_lines: usize = entry_lines[..newly_frozen_count]
+                                .iter()
+                                .map(|x| x.len())
+                                .sum();
+                            (log_count - 1, frozen_line_count + newly_frozen_lines)
+                        };
+
                         if let Some(mut buffer) = output_window.get_buffer()
                             && let Some(mut window) = output_window.get_window()
                         {
                             let tx_clone = tx.clone();
+                            let render_state_clone_2 = render_state_clone.clone();
                             schedule({
                                 move |_| {
                                     if let Ok(line_count) = buffer.line_count() {
@@ -236,7 +280,8 @@ impl ChatWindow {
                                             OptionOpts::builder().buffer(buffer.clone()).build();
                                         let _ =
                                             api::set_option_value("modifiable", true, &buf_opts);
-                                        let _ = buffer.set_lines(0.., false, content);
+                                        let _ =
+                                            buffer.set_lines(frozen_line_count.., false, content);
                                         let _ =
                                             api::set_option_value("modifiable", false, &buf_opts);
                                         let _ = api::set_option_value("modified", false, &buf_opts);
@@ -248,6 +293,12 @@ impl ChatWindow {
                                             let _ = window.set_cursor(new_line_count, cursor_col);
                                         }
                                     }
+
+                                    if let Ok(mut state) = render_state_clone_2.write() {
+                                        state.next_render_from = new_next_render_from;
+                                        state.frozen_line_count = new_frozen_line_count;
+                                    }
+
                                     let _ = tx_clone.send(());
                                 }
                             })

@@ -347,6 +347,7 @@ impl DisplayAsChat for TenonLog {
                 let content = if msg.content.is_empty() {
                     msg.reasoning.as_ref().map(|x| {
                         x.lines()
+                            .skip(0.max(x.len() - 3))
                             .map(|y| format!("> {}", y))
                             .collect::<Vec<_>>()
                             .join("\n")

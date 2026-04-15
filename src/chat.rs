@@ -16,6 +16,7 @@ use rig::{
 use serde_json::Value;
 use std::{
     collections::LinkedList,
+    sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, RwLock},
 };
 
@@ -143,6 +144,8 @@ impl From<TenonLog> for Vec<Message> {
 pub struct ChatProcess {
     pub logs: Arc<RwLock<LinkedList<TenonLog>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
+    cancel_token: Arc<AtomicBool>,
+    active_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl ChatProcess {
@@ -150,14 +153,22 @@ impl ChatProcess {
         Self {
             logs: Arc::new(RwLock::new(LinkedList::new())),
             usage: Arc::new(RwLock::new(None)),
+            cancel_token: Arc::new(AtomicBool::new(false)),
+            active_thread: None,
         }
     }
 
     pub fn send_message(&mut self, message: String) {
+        // Cancel previous thread
+        self.cancel_token.store(true, Ordering::SeqCst);
+
+        // Create new cancel token for the new thread
+        self.cancel_token = Arc::new(AtomicBool::new(false));
+        let cancel_token = Arc::clone(&self.cancel_token);
 
         let logs_clone = Arc::clone(&self.logs);
         let usage_clone = Arc::clone(&self.usage);
-        std::thread::spawn(move || {
+        self.active_thread = Some(std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
                 let mut tools: Vec<Box<dyn ToolDyn>> = vec![
@@ -210,6 +221,9 @@ impl ChatProcess {
 
                 let mut stream = agent.stream_chat(message, chat_history).await;
                 while let Some(result) = stream.next().await {
+                    if cancel_token.load(Ordering::SeqCst) {
+                        break;
+                    }
                     match result {
                         Ok(StreamItem::ToolResult {
                             tool_result,
@@ -325,6 +339,6 @@ impl ChatProcess {
                     }
                 }
             });
-        });
+        }));
     }
 }

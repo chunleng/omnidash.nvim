@@ -154,11 +154,6 @@ impl ChatProcess {
     }
 
     pub fn send_message(&mut self, message: String) {
-        if let Ok(mut logs) = self.logs.write() {
-            logs.push_back(TenonLog::User(TenonUserMessage::Text(
-                TenonUserTextMessage(message.clone()),
-            )))
-        }
 
         let logs_clone = Arc::clone(&self.logs);
         let usage_clone = Arc::clone(&self.usage);
@@ -205,6 +200,12 @@ impl ChatProcess {
                         .collect::<Vec<_>>();
                 } else {
                     todo!("fix after error is introduced")
+                }
+
+                if let Ok(mut logs) = logs_clone.write() {
+                    logs.push_back(TenonLog::User(TenonUserMessage::Text(
+                        TenonUserTextMessage(message.clone()),
+                    )))
                 }
 
                 let mut stream = agent.stream_chat(message, chat_history).await;

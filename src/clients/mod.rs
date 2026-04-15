@@ -318,9 +318,15 @@ fn get_openai_agent(
         .build()
         .unwrap()
         .completions_api();
-    let mut agent = client.agent(model_name);
+    let mut agent = client.agent(model_name.clone());
     if let Some(p) = preamble {
         agent = agent.preamble(&p);
+    }
+    // non-exhaustive for thinking model for now
+    if ["gpt-5.4", "o3", "o1"].contains(&model_name.as_str()) {
+        agent = agent.additional_params(serde_json::json!({
+            "reasoning_effort": "high"
+        }));
     }
     let agent = agent.tools(tools).build();
 

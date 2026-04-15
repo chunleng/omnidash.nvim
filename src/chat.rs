@@ -1,7 +1,7 @@
 use crate::{
     clients::{OllamaProviderConfig, StreamItem, SupportedModels, get_agent},
     mcp::McpHubCaller,
-    tools::{EditFile, ReadFile, WriteFile},
+    tools::{EditFile, FetchWebpage, ReadFile, WriteFile},
     utils::GLOBAL_EXECUTION_HANDLER,
 };
 use rig::{
@@ -166,6 +166,7 @@ impl ChatProcess {
             rt.block_on(async {
                 let mut tools: Vec<Box<dyn ToolDyn>> = vec![
                     Box::new(EditFile),
+                    Box::new(FetchWebpage),
                     Box::new(ReadFile),
                     Box::new(WriteFile),
                     Box::new(ThinkTool),

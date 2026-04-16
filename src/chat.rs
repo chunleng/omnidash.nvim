@@ -1,7 +1,7 @@
 use crate::{
     clients::{OllamaProviderConfig, StreamItem, SupportedModels, get_agent},
     mcp::McpHubCaller,
-    tools::{EditFile, FetchWebpage, ReadFile, WriteFile},
+    tools::{EditFile, FetchWebpage, ListFile, ReadFile, WriteFile},
     utils::GLOBAL_EXECUTION_HANDLER,
 };
 use nvim_oxi::api::types::LogLevel;
@@ -182,6 +182,7 @@ impl ChatProcess {
                 let mut tools: Vec<Box<dyn ToolDyn>> = vec![
                     Box::new(EditFile),
                     Box::new(FetchWebpage),
+                    Box::new(ListFile),
                     Box::new(ReadFile),
                     Box::new(WriteFile),
                     Box::new(ThinkTool),

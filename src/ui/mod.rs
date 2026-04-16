@@ -416,14 +416,17 @@ impl DisplayAsChat for TenonLog {
                     let display_last_x = if is_processing { 3 } else { 1 };
                     let reasoning_text = msg.reasoning.clone().unwrap_or("[thoughts]".to_string());
                     let lines = reasoning_text.lines().collect::<Vec<_>>();
-                    (
-                        lines
-                            .iter()
-                            .skip(lines.len().saturating_sub(display_last_x))
-                            .map(|y| y.to_string())
-                            .collect::<Vec<_>>(),
-                        SignIcon::AssistantReasoning,
-                    )
+                    let mut displayed_lines = lines
+                        .iter()
+                        .skip(lines.len().saturating_sub(display_last_x))
+                        .map(|y| y.to_string())
+                        .collect::<Vec<_>>();
+                    if lines.len() > display_last_x {
+                        displayed_lines
+                            .get_mut(0)
+                            .map(|x| *x = format!("... {}", x));
+                    }
+                    (displayed_lines, SignIcon::AssistantReasoning)
                 } else {
                     (
                         msg.content

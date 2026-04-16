@@ -22,6 +22,9 @@ fn tenon() -> OxiResult<Dictionary> {
             vim.api.nvim_set_hl(0, 'TenonSignAssistantReasoning', { fg = '#939393', ctermfg = 8 })
             vim.api.nvim_set_hl(0, 'TenonSignAssistantTalk', { fg = '#6d9c10', ctermfg = 2 })
             vim.api.nvim_set_hl(0, 'TenonSignTool', { fg = '#d0d0d0', ctermfg = 15 })
+            vim.api.nvim_set_hl(0, 'TenonLineAssistantReasoning', { link = 'Comment' })
+            vim.api.nvim_set_hl(0, 'TenonLineTool', { link = 'Comment' })
+            vim.api.nvim_set_hl(0, 'TenonLineChatMeta', { fg = '#28869c', ctermfg = 6 })
             "#,
         )
         .exec();

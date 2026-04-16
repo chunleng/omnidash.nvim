@@ -273,6 +273,7 @@ impl ChatWindow {
                             .cloned()
                             .collect();
 
+                        let mut usage_buf_line: Option<usize> = None;
                         if let Ok(usage) = usage_clone.read()
                             && let Some(usage) = usage.as_ref()
                         {
@@ -283,14 +284,25 @@ impl ChatWindow {
                                 usage.cached_input_tokens,
                                 usage.total_tokens
                             ));
+                            usage_buf_line = Some(frozen_line_count + content.len() - 1);
                         }
 
                         // Collect sign placements: (buf_line_idx, SignIcon)
+                        // Collect line highlight placements: (buf_line_idx, hl_group)
                         let mut signs: Vec<(usize, SignIcon)> = Vec::new();
+                        let mut line_highlights: Vec<(usize, &str)> = Vec::new();
                         let mut buf_line = frozen_line_count;
                         for (lines, sign) in &entry_lines {
                             signs.push((buf_line, *sign));
+                            if let Some(hl) = sign.line_hl_group() {
+                                for offset in 0..lines.len() {
+                                    line_highlights.push((buf_line + offset, hl));
+                                }
+                            }
                             buf_line += lines.len();
+                        }
+                        if let Some(ul) = usage_buf_line {
+                            line_highlights.push((ul, "TenonLineChatMeta"));
                         }
 
                         // Compute new render state for after buffer update
@@ -337,6 +349,16 @@ impl ChatWindow {
                                             let opts = SetExtmarkOpts::builder()
                                                 .sign_text(icon.text())
                                                 .sign_hl_group(icon.hl_group())
+                                                .build();
+                                            buffer.set_extmark(ns_id, *line, 0, &opts).ok();
+                                        }
+
+                                        // Place line highlight extmarks
+                                        for (line, hl) in &line_highlights {
+                                            let opts = SetExtmarkOpts::builder()
+                                                .end_line((line + 1).try_into().unwrap())
+                                                .hl_group(*hl)
+                                                .hl_eol(true)
                                                 .build();
                                             buffer.set_extmark(ns_id, *line, 0, &opts).ok();
                                         }
@@ -417,6 +439,13 @@ impl SignIcon {
             SignIcon::AssistantReasoning => "TenonSignAssistantReasoning",
             SignIcon::AssistantTalk => "TenonSignAssistantTalk",
             SignIcon::Tool => "TenonSignTool",
+        }
+    }
+    fn line_hl_group(&self) -> Option<&'static str> {
+        match self {
+            SignIcon::AssistantReasoning => Some("TenonLineAssistantReasoning"),
+            SignIcon::Tool => Some("TenonLineTool"),
+            _ => None,
         }
     }
 }

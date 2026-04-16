@@ -39,12 +39,12 @@ struct RenderState {
 pub struct ChatWindow {
     output_window: Arc<Mutex<Option<FixedBufferVimWindow>>>,
     input_window: Arc<Mutex<Option<FixedBufferVimWindow>>>,
-    pub chat_process: ChatProcess,
+    pub chat_process: Arc<RwLock<ChatProcess>>,
 }
 
 impl ChatWindow {
     pub fn new() -> Self {
-        let chat_process = ChatProcess::new();
+        let chat_process = Arc::new(RwLock::new(ChatProcess::new()));
 
         Self {
             output_window: Arc::new(Mutex::new(None)),
@@ -70,8 +70,8 @@ impl ChatWindow {
                 .to_string();
             if message.is_empty() {
                 notify("please enter your message before sending", LogLevel::Error);
-            } else {
-                self.chat_process.send_message(message);
+            } else if let Ok(mut chat_process) = self.chat_process.write() {
+                chat_process.send_message(message);
                 let _ = input_win_buffer.set_lines(0.., false, Vec::<String>::new());
             }
         }
@@ -215,8 +215,14 @@ impl ChatWindow {
             }));
             let chat_renderer_handle = AsyncHandle::new({
                 let output_window = win.clone();
-                let logs = self.chat_process.logs.clone();
-                let usage_clone = self.chat_process.usage.clone();
+                let logs;
+                let usage_clone;
+                if let Ok(chat_process) = self.chat_process.read() {
+                    logs = chat_process.logs.clone();
+                    usage_clone = chat_process.usage.clone();
+                } else {
+                    todo!("fix after error is introduced");
+                }
                 let render_state_clone = render_state.clone();
                 move || {
                     if let Ok(logs) = logs.read() {
@@ -358,14 +364,28 @@ impl ChatWindow {
 
             spawn({
                 let output_window = win.clone();
+                let chat_process_clone = self.chat_process.clone();
                 move || {
+                    let mut previous_processing_state = false;
                     loop {
                         if output_window.get_buffer().is_none() {
                             break;
                         }
-                        let _ = chat_renderer_handle.send();
-                        let _ = rx.recv();
-                        sleep(Duration::from_millis(5))
+                        let is_processing = if let Ok(chat_process) = chat_process_clone.read() {
+                            let current_state = chat_process.is_processing();
+                            // Check both current and previous state, we want to render one more
+                            // time after the state change
+                            let r = current_state || previous_processing_state;
+                            previous_processing_state = current_state;
+                            r
+                        } else {
+                            false
+                        };
+                        if is_processing {
+                            let _ = chat_renderer_handle.send();
+                            let _ = rx.recv();
+                        }
+                        sleep(Duration::from_millis(20))
                     }
                 }
             });

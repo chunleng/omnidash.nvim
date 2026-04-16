@@ -238,7 +238,7 @@ impl ChatWindow {
                             .iter()
                             .skip(start_idx)
                             .enumerate()
-                            .map(|(i, x)| x.as_chat_lines_with_sign(i == log_count - 1))
+                            .map(|(i, x)| x.as_chat_lines_with_sign(i == log_count - start_idx - 1))
                             .collect();
 
                         // Collect entries to render (from start_idx onwards)
@@ -413,7 +413,7 @@ impl DisplayAsChat for TenonLog {
             }
             TenonLog::Assistant(msg) => {
                 if msg.content.is_empty() {
-                    let display_last_x = if is_processing { 1 } else { 3 };
+                    let display_last_x = if is_processing { 3 } else { 1 };
                     let reasoning_text = msg.reasoning.clone().unwrap_or("[thoughts]".to_string());
                     let lines = reasoning_text.lines().collect::<Vec<_>>();
                     (

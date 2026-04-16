@@ -48,6 +48,7 @@ pub struct FixedBufferVimWindowOption {
     pub wrap: bool,
     pub line_break: bool,
     pub undo_levels: isize,
+    pub text_width: isize,
     pub number: bool,
     pub relative_number: bool,
     pub sign_column: String,
@@ -66,6 +67,7 @@ impl Default for FixedBufferVimWindowOption {
             wrap: true,
             line_break: true,
             undo_levels: 1000,
+            text_width: 0,
             sign_column: "auto".to_string(),
             number: true,
             relative_number: true,
@@ -98,6 +100,7 @@ impl FixedBufferVimWindow {
         api::set_option_value("filetype", option.file_type, &buf_opts)?;
         api::set_option_value("modifiable", option.modifiable, &buf_opts)?;
         api::set_option_value("undolevels", option.undo_levels, &buf_opts)?;
+        api::set_option_value("textwidth", option.text_width, &buf_opts)?;
 
         for keymap in option.buf_keymaps {
             for mode in keymap.modes {

@@ -239,6 +239,10 @@ impl ChatProcess {
         }
     }
 
+    pub fn cancel(&mut self) {
+        self.cancel_token.store(true, Ordering::SeqCst);
+    }
+
     pub fn is_processing(&self) -> bool {
         if let Some(thread) = self.active_thread.as_ref() {
             !thread.is_finished()

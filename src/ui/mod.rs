@@ -110,6 +110,15 @@ impl ChatWindow {
         Ok(())
     }
 
+    pub fn stop_streaming(&mut self) -> OxiResult<()> {
+        if let Ok(loaded) = self.loaded_chat_process.read() {
+            if let Ok(mut chat_process) = loaded.write() {
+                chat_process.cancel();
+            }
+        }
+        Ok(())
+    }
+
     pub fn close(&mut self) -> OxiResult<()> {
         // We just need to close one of the input/output windows as the windows are linked.
         if let Ok(input_win) = self.input_window.lock()
@@ -201,6 +210,12 @@ impl ChatWindow {
                         modes: vec![Mode::Insert, Mode::Normal],
                         lhs: "<c-cr>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.send()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
+                    Keymap {
+                        modes: vec![Mode::Insert, Mode::Normal],
+                        lhs: "<c-c>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.stop_streaming()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                     Keymap {
@@ -331,6 +346,12 @@ impl ChatWindow {
                         modes: vec![Mode::Normal],
                         lhs: "<c-q>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.dismiss_chat()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
+                    Keymap {
+                        modes: vec![Mode::Normal],
+                        lhs: "<c-c>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.stop_streaming()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                 ],

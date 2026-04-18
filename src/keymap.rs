@@ -11,7 +11,8 @@ pub fn create_lua_keymap_module(chat_window: Arc<Mutex<ChatWindow>>) -> Dictiona
     keymap_dict.insert("next_chat", Object::from(next_chat_fn(chat_window.clone())));
     keymap_dict.insert("prev_chat", Object::from(prev_chat_fn(chat_window.clone())));
     keymap_dict.insert("new_chat", Object::from(new_chat_fn(chat_window.clone())));
-    keymap_dict.insert("dismiss_chat", Object::from(dismiss_chat_fn(chat_window)));
+    keymap_dict.insert("dismiss_chat", Object::from(dismiss_chat_fn(chat_window.clone())));
+    keymap_dict.insert("stop_streaming", Object::from(stop_streaming_fn(chat_window)));
 
     keymap_dict
 }
@@ -81,6 +82,18 @@ fn dismiss_chat_fn(chat_window: Arc<Mutex<ChatWindow>>) -> Function<(), ()> {
         move |()| {
             if let Ok(mut win) = chat_window.lock() {
                 if let Err(e) = win.dismiss_chat() {
+                    notify(format!("{}", e), LogLevel::Error);
+                }
+            }
+        }
+    })
+}
+
+fn stop_streaming_fn(chat_window: Arc<Mutex<ChatWindow>>) -> Function<(), ()> {
+    Function::from_fn({
+        move |()| {
+            if let Ok(mut win) = chat_window.lock() {
+                if let Err(e) = win.stop_streaming() {
                     notify(format!("{}", e), LogLevel::Error);
                 }
             }

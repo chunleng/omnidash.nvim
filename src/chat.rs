@@ -1,5 +1,5 @@
 use crate::{
-    clients::{ChatAgent, OllamaProviderConfig, StreamItem, SupportedModels, get_agent},
+    clients::{ChatAgent, PROVIDERS, ProviderConfig, StreamItem, SupportedModels, get_agent},
     tools::resolve_tools,
     utils::GLOBAL_EXECUTION_HANDLER,
 };
@@ -22,12 +22,13 @@ pub static CHAT_PROCESSES: LazyLock<Mutex<Vec<Arc<RwLock<ChatProcess>>>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
 static AGENT_REGISTRY: LazyLock<HashMap<&'static str, TenonAgent>> = LazyLock::new(|| {
+    let ollama_cloud_config = match PROVIDERS.get("ollama_cloud") {
+        Some(ProviderConfig::Ollama(config)) => config.clone(),
+        _ => panic!("'ollama_cloud' provider not found in PROVIDERS"),
+    };
     let default = TenonAgent::new(
         SupportedModels::Ollama {
-            config: OllamaProviderConfig {
-                base_url: "https://ollama.com".to_string(),
-                ..Default::default()
-            },
+            config: ollama_cloud_config,
             model_name: "glm-5.1".to_string(),
         },
         &[

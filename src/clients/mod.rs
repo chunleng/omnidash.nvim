@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use rig::{
     agent::Agent,
@@ -38,6 +41,27 @@ impl SupportedModels {
         }
     }
 }
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum ProviderConfig {
+    Ollama(OllamaProviderConfig),
+    Gemini(GeminiProviderConfig),
+    OpenAI(OpenAIProviderConfig),
+    Bedrock(NoProviderConfig),
+}
+
+pub static PROVIDERS: LazyLock<HashMap<&'static str, ProviderConfig>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert(
+        "ollama_cloud",
+        ProviderConfig::Ollama(OllamaProviderConfig {
+            base_url: "https://ollama.com".to_string(),
+            ..Default::default()
+        }),
+    );
+    map
+});
 
 pub enum ChatAgent {
     Ollama(Agent<ollama::CompletionModel>),
@@ -219,9 +243,12 @@ pub fn get_agent(
         SupportedModels::OpenAI { config, model_name } => {
             ChatAgent::OpenAI(get_openai_agent(config, model_name, preamble, tools))
         }
-        SupportedModels::Bedrock { model_name } => {
-            ChatAgent::Bedrock(get_bedrock_agent(model_name, preamble, tools))
-        }
+        SupportedModels::Bedrock { model_name } => ChatAgent::Bedrock(get_bedrock_agent(
+            NoProviderConfig,
+            model_name,
+            preamble,
+            tools,
+        )),
     }
 }
 
@@ -348,7 +375,11 @@ fn get_openai_agent(
     agent
 }
 
+#[derive(Debug, Clone)]
+pub struct NoProviderConfig;
+
 fn get_bedrock_agent(
+    _config: NoProviderConfig,
     model_name: String,
     preamble: Option<String>,
     tools: Vec<Box<dyn ToolDyn>>,

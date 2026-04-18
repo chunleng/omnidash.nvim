@@ -411,16 +411,24 @@ impl ChatWindow {
                             .cloned()
                             .collect();
 
-                        let mut usage_buf_line: Option<usize> = None;
-                        if let Ok(usage) = usage_clone.read()
-                            && let Some(usage) = usage.as_ref()
+                        let usage_buf_line;
                         {
+                            let (input, output, cached, total) = if let Ok(usage) =
+                                usage_clone.read()
+                                && let Some(usage) = usage.as_ref()
+                            {
+                                (
+                                    usage.input_tokens,
+                                    usage.output_tokens,
+                                    usage.cached_input_tokens,
+                                    usage.total_tokens,
+                                )
+                            } else {
+                                (0, 0, 0, 0)
+                            };
                             content.push(format!(
                                 "{} 󰕒 | {} 󰇚 | {}  | {} total",
-                                usage.input_tokens,
-                                usage.output_tokens,
-                                usage.cached_input_tokens,
-                                usage.total_tokens
+                                input, output, cached, total
                             ));
                             usage_buf_line = Some(frozen_line_count + content.len() - 1);
                         }

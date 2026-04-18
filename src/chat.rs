@@ -15,13 +15,24 @@ use rig::{
 };
 use serde_json::Value;
 use std::{
-    collections::LinkedList,
+    collections::{HashMap, LinkedList},
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, LazyLock, Mutex, RwLock},
 };
 
 pub static CHAT_PROCESSES: LazyLock<Mutex<Vec<Arc<RwLock<ChatProcess>>>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
+
+static AGENT_REGISTRY: LazyLock<HashMap<&'static str, TenonAgent>> = LazyLock::new(|| {
+    let default = TenonAgent::new(SupportedModels::Ollama {
+        config: OllamaProviderConfig {
+            base_url: "https://ollama.com".to_string(),
+            ..Default::default()
+        },
+        model_name: "glm-5.1".to_string(),
+    });
+    [("default", default)].into_iter().collect()
+});
 
 /// Returns the chat process at `index`, creating new ones as needed.
 pub fn get_or_create_chat_process(index: usize) -> Arc<RwLock<ChatProcess>> {
@@ -200,16 +211,18 @@ impl TenonAgent {
 
 impl ChatProcess {
     pub fn new() -> Self {
+        Self::with_agent("default")
+    }
+
+    pub fn with_agent(agent_name: &str) -> Self {
+        let agent = AGENT_REGISTRY
+            .get(agent_name)
+            .unwrap_or_else(|| panic!("agent '{}' not found in registry", agent_name))
+            .clone();
         Self {
             logs: Arc::new(RwLock::new(LinkedList::new())),
             usage: Arc::new(RwLock::new(None)),
-            agent: TenonAgent::new(SupportedModels::Ollama {
-                config: OllamaProviderConfig {
-                    base_url: "https://ollama.com".to_string(),
-                    ..Default::default()
-                },
-                model_name: "glm-5.1".to_string(),
-            }),
+            agent,
             cancel_token: Arc::new(AtomicBool::new(false)),
             active_thread: None,
         }

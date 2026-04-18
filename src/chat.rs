@@ -206,9 +206,7 @@ impl TenonAgent {
         Self {
             model,
             preamble: Some(
-                "Answer in the fewest words possible. Use abbreviations, symbols, and \
-                fragments. Omit articles, conjunctions, and filler. Be precise, not \
-                verbose."
+                "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words."
                     .to_string(),
             ),
             tool_names: tools.iter().map(|t| t.as_ref().to_string()).collect(),

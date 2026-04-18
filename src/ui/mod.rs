@@ -2,7 +2,7 @@ mod components;
 use std::{
     sync::{
         Arc, Mutex, RwLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc,
     },
     thread::{sleep, spawn},
@@ -50,6 +50,7 @@ pub struct ChatWindow {
     pub loaded_chat_index: usize,
     render_state: Arc<RwLock<RenderState>>,
     force_rerender: Arc<AtomicBool>,
+    spinner_frame: Arc<AtomicUsize>,
 }
 
 impl ChatWindow {
@@ -65,6 +66,7 @@ impl ChatWindow {
             loaded_chat_index,
             render_state: Arc::new(RwLock::new(RenderState::default())),
             force_rerender: Arc::new(AtomicBool::new(false)),
+            spinner_frame: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -347,10 +349,12 @@ impl ChatWindow {
             let (tx, rx) = mpsc::channel();
             let ns_id = api::create_namespace("TenonSigns");
             let render_state = self.render_state.clone();
+            let spinner_frame = self.spinner_frame.clone();
             let chat_renderer_handle = AsyncHandle::new({
                 let output_window = win.clone();
                 let loaded_chat_process = self.loaded_chat_process.clone();
                 let render_state_clone = render_state.clone();
+                let spinner_frame_clone = spinner_frame.clone();
                 move || {
                     let (logs, usage_clone) = {
                         if let Ok(loaded) = loaded_chat_process.read() {
@@ -411,6 +415,19 @@ impl ChatWindow {
                             .cloned()
                             .collect();
 
+                        // Spinner line
+                        const SPINNER_CHARS: [&str; 7] = ["⣀⣤", "⣶⣿", "⣿⣿", "⣿⣶", "⣶⣤", "⣤⣀", "⣀⣀"];
+                        let spinner_idx =
+                            spinner_frame_clone.load(Ordering::SeqCst) % SPINNER_CHARS.len();
+                        let is_currently_processing = if let Ok(loaded) = loaded_chat_process.read()
+                        {
+                            loaded.read().map_or(false, |cp| cp.is_processing())
+                        } else {
+                            false
+                        };
+                        content.push(String::new());
+                        let spinner_buf_line = frozen_line_count + content.len() - 1;
+
                         let usage_buf_line;
                         {
                             let (input, output, cached, total) = if let Ok(usage) =
@@ -449,6 +466,9 @@ impl ChatWindow {
                         }
                         if let Some(ul) = usage_buf_line {
                             line_highlights.push((ul, "TenonLineChatMeta"));
+                        }
+                        if is_currently_processing {
+                            line_highlights.push((spinner_buf_line, "TenonLineChatMeta"));
                         }
 
                         // Compute new render state for after buffer update
@@ -498,6 +518,15 @@ impl ChatWindow {
                                                 .build();
                                             buffer.set_extmark(ns_id, *line, 0, &opts).ok();
                                         }
+                                        if is_currently_processing {
+                                            let opts = SetExtmarkOpts::builder()
+                                                .sign_text(SPINNER_CHARS[spinner_idx])
+                                                .sign_hl_group("TenonSignProcessing")
+                                                .build();
+                                            buffer
+                                                .set_extmark(ns_id, spinner_buf_line, 0, &opts)
+                                                .ok();
+                                        }
 
                                         // Place line highlight extmarks
                                         for (line, hl) in &line_highlights {
@@ -534,9 +563,11 @@ impl ChatWindow {
                 let output_window = win.clone();
                 let loaded_chat_process = self.loaded_chat_process.clone();
                 let force_rerender = self.force_rerender.clone();
+                let spinner_frame = self.spinner_frame.clone();
                 move || {
                     // Set true so that the first run will alway try to redraw
                     let mut previous_processing_state = true;
+                    let mut tick: u32 = 0;
                     loop {
                         if output_window.get_buffer().is_none() {
                             break;
@@ -556,6 +587,10 @@ impl ChatWindow {
                             false
                         };
                         if is_processing || force_rerender.swap(false, Ordering::SeqCst) {
+                            if is_processing && tick % 3 == 0 {
+                                spinner_frame.fetch_add(1, Ordering::SeqCst);
+                            }
+                            tick = tick.wrapping_add(1);
                             let _ = chat_renderer_handle.send();
                             let _ = rx.recv();
                         }

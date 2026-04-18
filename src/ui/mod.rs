@@ -161,20 +161,13 @@ impl ChatWindow {
         self.load_chat(new_index)
     }
 
-    /// Dismisses the current chat. If it was the last one, closes the window
-    /// and prepares a fresh chat for the next open.
+    /// Dismisses the current chat. If it was the last one, creates a new
+    /// chat and loads it so the window stays open.
     pub fn dismiss_chat(&mut self) -> OxiResult<()> {
         remove_chat_process(self.loaded_chat_index.load(Ordering::SeqCst));
 
         if chat_process_count() == 0 {
-            self.close()?;
-            self.loaded_chat_index.store(0, Ordering::SeqCst);
-            if let Ok(mut loaded) = self.loaded_chat_process.write() {
-                *loaded = get_or_create_chat_process(0);
-            }
-            if let Ok(mut state) = self.render_state.write() {
-                *state = RenderState::default();
-            }
+            self.new_chat()?;
         } else {
             let current = self.loaded_chat_index.load(Ordering::SeqCst);
             let new_index = current.min(chat_process_count() - 1);

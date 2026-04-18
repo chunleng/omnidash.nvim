@@ -32,6 +32,19 @@ pub fn get_or_create_chat_process(index: usize) -> Arc<RwLock<ChatProcess>> {
     processes[index].clone()
 }
 
+/// Removes the chat process at `index`, shifting subsequent indices down.
+pub fn remove_chat_process(index: usize) {
+    let mut processes = CHAT_PROCESSES.lock().unwrap();
+    if index < processes.len() {
+        processes.remove(index);
+    }
+}
+
+/// Returns the current number of chat processes.
+pub fn chat_process_count() -> usize {
+    CHAT_PROCESSES.lock().unwrap().len()
+}
+
 #[derive(Debug, Clone)]
 pub struct TenonUserTextMessage(pub String);
 

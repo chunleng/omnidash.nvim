@@ -434,7 +434,8 @@ impl ChatWindow {
                             .collect();
 
                         // Spinner line
-                        const SPINNER_CHARS: [&str; 7] = ["⣀⣤", "⣶⣿", "⣿⣿", "⣿⣶", "⣶⣤", "⣤⣀", "⣀⣀"];
+                        const SPINNER_CHARS: [&str; 8] =
+                            ["⣀⣤", "⣤⣶", "⣶⣿", "⣿⣿", "⣿⣶", "⣶⣤", "⣤⣀", "⣀⣀"];
                         let spinner_idx =
                             spinner_frame_clone.load(Ordering::SeqCst) % SPINNER_CHARS.len();
                         let is_currently_processing = if let Ok(loaded) = loaded_chat_process.read()

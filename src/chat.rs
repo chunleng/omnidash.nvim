@@ -187,7 +187,8 @@ impl TenonAgent {
         tools: &[impl AsRef<str>],
     ) -> Self {
         let mut target_preamble =
-            "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words."
+            "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. \
+            User may edit files between steps → files change silently. File state ≠ before? → user likely edited. Think why."
                 .to_string();
         if let Some(p) = preamble {
             target_preamble = format!("{}\n{}", target_preamble, p);

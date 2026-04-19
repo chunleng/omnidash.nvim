@@ -1,4 +1,5 @@
 mod components;
+mod nvim_primitives;
 use std::{
     sync::{
         Arc, Mutex, RwLock,
@@ -25,8 +26,11 @@ use crate::{
         ChatProcess, TenonAssistantMessageContent, TenonLog, TenonToolLog, TenonUserMessage,
         TenonUserTextMessage, chat_process_count, get_or_create_chat_process, remove_chat_process,
     },
-    ui::components::{
-        FixedBufferVimWindow, FixedBufferVimWindowOption, Keymap, SplitWindowOption, WindowOption,
+    ui::{
+        components::{
+            FixedBufferVimWindow, FixedBufferVimWindowOption, SplitWindowOption, WindowOption,
+        },
+        nvim_primitives::buffer::NvimKeymap,
     },
     utils::notify,
 };
@@ -294,49 +298,49 @@ impl ChatWindow {
                 },
                 file_type: "markdown".to_string(),
                 buf_keymaps: vec![
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Insert, Mode::Normal],
                         lhs: "<c-cr>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.send()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Insert, Mode::Normal],
                         lhs: "<c-c>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.stop_streaming()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "q".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.close()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-n>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.next_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-p>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.prev_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<leader>n".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.new_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-q>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.dismiss_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<tab>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),
@@ -412,43 +416,43 @@ impl ChatWindow {
                 modifiable: false,
                 file_type: "markdown".to_string(),
                 buf_keymaps: vec![
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "q".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.close()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-n>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.next_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-p>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.prev_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<leader>n".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.new_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-q>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.dismiss_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<c-c>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.stop_streaming()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
-                    Keymap {
+                    NvimKeymap {
                         modes: vec![Mode::Normal],
                         lhs: "<tab>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),

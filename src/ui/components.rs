@@ -1,19 +1,12 @@
+use crate::ui::nvim_primitives::buffer::{NvimBuffer, NvimBufferOption, NvimKeymap};
 use nvim_oxi::{
     Result as OxiResult,
     api::{
         self,
-        opts::{OptionOpts, SetKeymapOpts},
-        types::{Mode, WindowConfig, WindowRelativeTo},
+        opts::OptionOpts,
+        types::{WindowConfig, WindowRelativeTo},
     },
 };
-
-#[derive(Debug, Clone)]
-pub struct Keymap {
-    pub modes: Vec<Mode>,
-    pub lhs: String,
-    pub rhs: String,
-    pub opts: SetKeymapOpts,
-}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -52,7 +45,7 @@ pub struct FixedBufferVimWindowOption {
     pub number: bool,
     pub relative_number: bool,
     pub sign_column: String,
-    pub buf_keymaps: Vec<Keymap>,
+    pub buf_keymaps: Vec<NvimKeymap>,
     pub window_option: WindowOption,
 }
 
@@ -82,31 +75,13 @@ impl Default for FixedBufferVimWindowOption {
 
 #[derive(Debug, Clone)]
 pub struct FixedBufferVimWindow {
-    buffer: api::Buffer,
+    buffer: NvimBuffer,
     window: api::Window,
 }
 
 impl FixedBufferVimWindow {
     pub fn new(option: FixedBufferVimWindowOption) -> OxiResult<Self> {
-        let mut buffer = api::create_buf(option.buf_listed, false)?;
-
-        let buf_opts = OptionOpts::builder().buffer(buffer.clone()).build();
-        // Needed for this struct as we want to make sure buffer are closed when window close
-        api::set_option_value("bufhidden", "wipe", &buf_opts)?;
-
-        api::set_option_value("buftype", option.buf_type, &buf_opts)?;
-        api::set_option_value("buflisted", option.buf_listed, &buf_opts)?;
-        api::set_option_value("swapfile", option.swap_file, &buf_opts)?;
-        api::set_option_value("filetype", option.file_type, &buf_opts)?;
-        api::set_option_value("modifiable", option.modifiable, &buf_opts)?;
-        api::set_option_value("undolevels", option.undo_levels, &buf_opts)?;
-        api::set_option_value("textwidth", option.text_width, &buf_opts)?;
-
-        for keymap in option.buf_keymaps {
-            for mode in keymap.modes {
-                buffer.set_keymap(mode, &keymap.lhs, &keymap.rhs, &keymap.opts)?;
-            }
-        }
+        let buffer = NvimBuffer::try_from(&option)?;
 
         let window = match option.window_option {
             WindowOption::CenteredFloat { height, width } => {
@@ -125,7 +100,7 @@ impl FixedBufferVimWindow {
                     .row(row)
                     .col(col)
                     .build();
-                api::open_win(&buffer, true, &win_config)?
+                api::open_win(&buffer.inner, true, &win_config)?
             }
             WindowOption::Split {
                 direction,
@@ -165,7 +140,7 @@ impl FixedBufferVimWindow {
                     }
                 }
                 let mut win = api::get_current_win();
-                win.set_buf(&buffer)?;
+                win.set_buf(&buffer.inner)?;
                 win
             }
         };
@@ -184,11 +159,7 @@ impl FixedBufferVimWindow {
     }
 
     pub fn get_buffer(&self) -> Option<api::Buffer> {
-        if self.buffer.is_valid() {
-            Some(self.buffer.clone())
-        } else {
-            None
-        }
+        self.buffer.get_buffer()
     }
 
     pub fn get_window(&self) -> Option<api::Window> {
@@ -197,5 +168,25 @@ impl FixedBufferVimWindow {
         } else {
             None
         }
+    }
+}
+
+impl TryFrom<&FixedBufferVimWindowOption> for NvimBuffer {
+    type Error = nvim_oxi::Error;
+
+    fn try_from(value: &FixedBufferVimWindowOption) -> Result<Self, Self::Error> {
+        Self::new(NvimBufferOption {
+            buf_type: value.buf_type.to_string(),
+            buf_listed: value.buf_listed,
+            // TODO FixedBufferVimWindow actually does not have to be wiped always, but we need to
+            // think of ways to ensure that we don't get leftover hidden buffers.
+            buf_hidden: "wipe".to_string(),
+            swap_file: value.swap_file,
+            file_type: value.file_type.to_string(),
+            modifiable: value.modifiable,
+            undo_levels: value.undo_levels,
+            text_width: value.text_width,
+            buf_keymaps: value.buf_keymaps.clone(),
+        })
     }
 }

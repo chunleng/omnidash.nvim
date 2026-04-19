@@ -11,6 +11,16 @@ pub mod user;
 pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
+    default_agent: String,
+}
+
+impl TenonConfig {
+    pub fn default_agent(&self) -> TenonAgent {
+        self.agents
+            .get(&self.default_agent)
+            .expect("the program failed to enforce default_agent validation")
+            .clone()
+    }
 }
 
 impl Default for TenonConfig {
@@ -22,8 +32,9 @@ impl Default for TenonConfig {
         let mut default_providers: HashMap<String, ProviderConfig> = HashMap::new();
         default_providers.insert("ollama_cloud".to_string(), ollama_cloud_provider.clone());
         let mut default_agents: HashMap<String, TenonAgent> = HashMap::new();
+        let default_agent_name = "default".to_string();
         default_agents.insert(
-            "default".to_string(),
+            default_agent_name.clone(),
             TenonAgent::new(
                 SupportedModels {
                     config: ollama_cloud_provider,
@@ -44,6 +55,7 @@ impl Default for TenonConfig {
         TenonConfig {
             connectors: default_providers,
             agents: default_agents,
+            default_agent: default_agent_name,
         }
     }
 }

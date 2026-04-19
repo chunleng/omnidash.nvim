@@ -207,15 +207,10 @@ impl TenonAgent {
 
 impl ChatProcess {
     pub fn new() -> Self {
-        Self::with_agent("default")
+        Self::with_agent(get_application_config().default_agent())
     }
 
-    pub fn with_agent(agent_name: &str) -> Self {
-        let agent = get_application_config()
-            .agents
-            .get(agent_name)
-            .unwrap_or_else(|| panic!("agent '{}' not found in registry", agent_name))
-            .clone();
+    pub fn with_agent(agent: TenonAgent) -> Self {
         Self {
             logs: Arc::new(RwLock::new(LinkedList::new())),
             usage: Arc::new(RwLock::new(None)),

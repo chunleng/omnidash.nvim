@@ -47,6 +47,7 @@ impl Default for TenonConfig {
                     "fetch_webpage",
                     "list_file",
                     "read_file",
+                    "search_text",
                     "web_search",
                     "think",
                 ],

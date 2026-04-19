@@ -3,6 +3,7 @@ pub mod edit_file;
 pub mod fetch_webpage;
 pub mod list_file;
 pub mod read_file;
+pub mod search_text;
 pub mod web_search;
 
 use crate::mcp::McpHubCaller;
@@ -11,6 +12,7 @@ pub use edit_file::EditFile;
 pub use fetch_webpage::FetchWebpage;
 pub use list_file::ListFile;
 pub use read_file::ReadFile;
+pub use search_text::SearchText;
 use rig::{tool::ToolDyn, tools::ThinkTool};
 pub use web_search::WebSearch;
 
@@ -43,6 +45,10 @@ pub fn resolve_tools(names: &[impl AsRef<str>]) -> Vec<Box<dyn ToolDyn>> {
         (
             "read_file".to_string(),
             Box::new(ReadFile) as Box<dyn ToolDyn>,
+        ),
+        (
+            "search_text".to_string(),
+            Box::new(SearchText) as Box<dyn ToolDyn>,
         ),
         (
             "web_search".to_string(),

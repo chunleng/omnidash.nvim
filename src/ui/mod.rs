@@ -84,6 +84,34 @@ impl ChatWindow {
         Ok(())
     }
 
+    pub fn toggle_focus(&mut self) -> OxiResult<()> {
+        // Determine target first, then drop locks before switching
+        // to avoid deadlock (focus methods also acquire the same mutexes).
+        let target_win = {
+            let current_win = api::get_current_win();
+            let Ok(input_win) = self.input_window.lock() else {
+                return Ok(());
+            };
+            if let Some(input_win) = input_win.as_ref()
+                && let Some(win) = input_win.get_window()
+                && current_win == win
+            {
+                // In input window → switch to output window
+                let Ok(output_win) = self.output_window.lock() else {
+                    return Ok(());
+                };
+                output_win.as_ref().and_then(|w| w.get_window())
+            } else {
+                // In output window (or elsewhere) → switch to input window
+                input_win.as_ref().and_then(|w| w.get_window())
+            }
+        };
+        if let Some(win) = target_win {
+            api::set_current_win(&win)?;
+        }
+        Ok(())
+    }
+
     pub fn open(&mut self) -> OxiResult<()> {
         self.get_or_create_output_window()?;
         self.get_or_create_input_window()?;
@@ -308,6 +336,12 @@ impl ChatWindow {
                         rhs: "<cmd>lua require('tenon').keymap.dismiss_chat()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
+                    Keymap {
+                        modes: vec![Mode::Normal],
+                        lhs: "<tab>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
                 ],
                 ..Default::default()
             })?;
@@ -412,6 +446,12 @@ impl ChatWindow {
                         modes: vec![Mode::Normal],
                         lhs: "<c-c>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.stop_streaming()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
+                    Keymap {
+                        modes: vec![Mode::Normal],
+                        lhs: "<tab>".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                 ],

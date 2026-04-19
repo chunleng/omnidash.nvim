@@ -12,6 +12,7 @@ pub fn create_lua_keymap_module() -> Dictionary {
     keymap_dict.insert("dismiss_chat", Object::from(dismiss_chat_fn()));
     keymap_dict.insert("stop_streaming", Object::from(stop_streaming_fn()));
     keymap_dict.insert("toggle", Object::from(toggle_fn()));
+    keymap_dict.insert("toggle_focus", Object::from(toggle_focus_fn()));
 
     keymap_dict
 }
@@ -105,6 +106,18 @@ fn toggle_fn() -> Function<(), ()> {
         move |()| {
             if let Ok(mut win) = get_chat_window().lock() {
                 if let Err(e) = win.toggle() {
+                    notify(format!("{}", e), LogLevel::Error);
+                }
+            }
+        }
+    })
+}
+
+fn toggle_focus_fn() -> Function<(), ()> {
+    Function::from_fn({
+        move |()| {
+            if let Ok(mut win) = get_chat_window().lock() {
+                if let Err(e) = win.toggle_focus() {
                     notify(format!("{}", e), LogLevel::Error);
                 }
             }

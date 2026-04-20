@@ -159,10 +159,10 @@ impl ChatDisplay {
                         let total = chat_process_count();
                         format!("{} of {}", idx + 1, total)
                     };
-                    let model_display = chat_process.agent.model.display_name();
+                    let agent_name = chat_process.active_agent.name.clone();
                     drop(chat_process);
                     drop(chat);
-                    content.push(format!("󰭹  {}, {}", chat_index_display, model_display));
+                    content.push(format!("󰭹  {}, agent: {}", chat_index_display, agent_name));
                     let spinner_buf_line = frozen_line_count + content.len() - 1;
 
                     let usage_buf_line;

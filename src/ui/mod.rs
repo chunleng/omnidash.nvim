@@ -1,5 +1,6 @@
 mod nvim_primitives;
 mod panels;
+pub mod picker;
 mod widget;
 
 use std::sync::{
@@ -150,6 +151,17 @@ impl ChatWindow {
             }
         }
         Ok(())
+    }
+
+    /// Forces the output widget to re-render (e.g. after switching agents).
+    /// Safe to call from any thread when the render thread is already running,
+    /// since it only sets an atomic flag and resets an RwLock-protected state.
+    pub fn force_render(&self) {
+        if let Ok(mut output_win) = self.output_window.lock() {
+            if let Some(panel) = output_win.as_mut() {
+                let _ = panel.widget.render();
+            }
+        }
     }
 
     fn is_open(&self) -> bool {
@@ -370,6 +382,12 @@ impl ChatWindow {
                     rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),
                     opts: SetKeymapOpts::default(),
                 },
+                NvimKeymap {
+                    modes: vec![Mode::Normal],
+                    lhs: "ga".to_string(),
+                    rhs: "<cmd>lua require('tenon').keymap.select_agent()<cr>".to_string(),
+                    opts: SetKeymapOpts::default(),
+                },
             ],
             ..Default::default()
         })
@@ -518,6 +536,12 @@ impl ChatWindow {
                         modes: vec![Mode::Normal],
                         lhs: "<tab>".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.toggle_focus()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
+                    NvimKeymap {
+                        modes: vec![Mode::Normal],
+                        lhs: "ga".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.select_agent()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                 ],

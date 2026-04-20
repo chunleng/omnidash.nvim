@@ -1,0 +1,108 @@
+use nvim_oxi::Result as OxiResult;
+
+use crate::utils::GLOBAL_EXECUTION_HANDLER;
+
+const CURRENT_MARKER: &str = "> ";
+const OTHER_MARKER: &str = "  ";
+
+/// Shows a FzfLua single-select picker.
+///
+/// Displays `prompt` as the header and `options` as selectable items.
+/// If `current` is `Some(item)`, that item is visually marked with `>`.
+/// The result is delivered asynchronously via `on_select` (called with
+/// `Some(selection)` or `None` if cancelled).
+///
+/// This function is non-blocking and safe to call from the main thread
+/// (e.g. from a keymap handler).
+pub fn pick(
+    prompt: &str,
+    options: &[&str],
+    current: Option<&str>,
+    on_select: impl FnOnce(Option<String>) + Send + 'static,
+) -> OxiResult<()> {
+    let marked_options: Vec<String> = options
+        .iter()
+        .map(|opt| {
+            if current == Some(*opt) {
+                format!("{}{}", CURRENT_MARKER, opt)
+            } else {
+                format!("{}{}", OTHER_MARKER, opt)
+            }
+        })
+        .collect();
+
+    let options_lua = format!(
+        "{{ {} }}",
+        marked_options
+            .iter()
+            .map(|o| format!("[[{}]]", o))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let prompt_escaped = prompt.replace('\'', "\\'");
+
+    let lua_code = format!(
+        r#"
+local fzf = require('fzf-lua')
+local resolved = false
+
+fzf.fzf_exec({options}, {{
+    prompt = '{prompt}> ',
+    winopts = {{
+        on_create = function()
+            local winid = vim.api.nvim_get_current_win()
+            vim.api.nvim_create_autocmd('WinClosed', {{
+                pattern = tostring(winid),
+                once = true,
+                callback = function()
+                    vim.defer_fn(function()
+                        if not resolved then
+                            resolved = true
+                            resolve({{error = "cancelled"}})
+                        end
+                    end, 3000)
+                end,
+            }})
+        end,
+    }},
+    actions = {{
+        ['default'] = function(sel)
+            if not resolved then
+                resolved = true
+                resolve({{response = sel and sel[1] or nil}})
+            end
+        end,
+    }},
+}})
+"#,
+        options = options_lua,
+        prompt = prompt_escaped,
+    );
+
+    std::thread::spawn(move || {
+        let selected = match GLOBAL_EXECUTION_HANDLER.execute_on_main_thread_async(&lua_code) {
+            Ok(result) => {
+                if result.get("error").is_some() {
+                    None
+                } else {
+                    result
+                        .get("response")
+                        .and_then(|v| v.as_str())
+                        .map(|s| clean_marker(s))
+                }
+            }
+            Err(_) => None,
+        };
+        on_select(selected);
+    });
+
+    Ok(())
+}
+
+fn clean_marker(s: &str) -> String {
+    s.strip_prefix(CURRENT_MARKER)
+        .or_else(|| s.strip_prefix(OTHER_MARKER))
+        .unwrap_or(s)
+        .to_string()
+}

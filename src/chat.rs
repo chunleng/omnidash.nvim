@@ -4,7 +4,7 @@ use crate::{
     tools::resolve_tools,
     utils::GLOBAL_EXECUTION_HANDLER,
 };
-use nvim_oxi::api::types::LogLevel;
+use nvim_oxi::{Result as OxiResult, api::types::LogLevel};
 use rig::{
     OneOrMany,
     agent::Text,
@@ -168,9 +168,22 @@ impl From<TenonLog> for Vec<Message> {
 pub struct ChatProcess {
     pub logs: Arc<RwLock<LinkedList<TenonLog>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
-    pub agent: TenonAgent,
+    pub active_agent: ActiveAgent,
     cancel_token: Arc<AtomicBool>,
     active_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveAgent {
+    pub name: String,
+    pub inner: TenonAgent,
+}
+
+impl std::ops::Deref for ActiveAgent {
+    type Target = TenonAgent;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -208,17 +221,25 @@ impl TenonAgent {
 
 impl ChatProcess {
     pub fn new() -> Self {
-        Self::with_agent(get_application_config().default_agent())
+        Self::with_agent_name(get_application_config().default_agent)
+            .expect("the program failed to enforce default_agent validation")
     }
 
-    pub fn with_agent(agent: TenonAgent) -> Self {
-        Self {
+    pub fn with_agent_name(agent_name: String) -> OxiResult<Self> {
+        Ok(Self {
             logs: Arc::new(RwLock::new(LinkedList::new())),
             usage: Arc::new(RwLock::new(None)),
-            agent,
+            active_agent: ActiveAgent {
+                name: agent_name.to_string(),
+                inner: get_application_config()
+                    .agents
+                    .get(&agent_name)
+                    .ok_or(nvim_oxi::Error::Mlua(mlua::Error::RuntimeError("".into())))?
+                    .clone(),
+            },
             cancel_token: Arc::new(AtomicBool::new(false)),
             active_thread: None,
-        }
+        })
     }
 
     pub fn cancel(&mut self) {
@@ -243,7 +264,7 @@ impl ChatProcess {
 
         let logs_clone = Arc::clone(&self.logs);
         let usage_clone = Arc::clone(&self.usage);
-        let agent_clone = self.agent.clone();
+        let agent_clone = self.active_agent.clone();
         self.active_thread = Some(std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {

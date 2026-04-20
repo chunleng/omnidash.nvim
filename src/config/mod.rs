@@ -11,16 +11,7 @@ pub mod user;
 pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
-    default_agent: String,
-}
-
-impl TenonConfig {
-    pub fn default_agent(&self) -> TenonAgent {
-        self.agents
-            .get(&self.default_agent)
-            .expect("the program failed to enforce default_agent validation")
-            .clone()
-    }
+    pub default_agent: String,
 }
 
 impl Default for TenonConfig {

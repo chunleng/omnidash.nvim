@@ -51,26 +51,15 @@ impl Default for FixedBufferPanelOption {
 
 #[derive(Clone)]
 pub struct FixedBufferPanel<T: Widget> {
-    pub buffer: NvimBuffer,
     pub window: NvimWindow,
-    pub widget: Option<T>,
+    pub widget: T,
 }
 
 impl<T: Widget> FixedBufferPanel<T> {
-    pub fn new(option: FixedBufferPanelOption) -> OxiResult<Self> {
-        let buffer = NvimBuffer::try_from(&option)?;
-        let window = NvimWindow::try_from((&buffer.clone(), &option))?;
-
-        Ok(Self {
-            buffer,
-            window,
-            widget: None,
-        })
-    }
-
-    pub fn attach_widget(&mut self, mut widget: T) {
-        let _ = widget.render();
-        self.widget = Some(widget);
+    pub fn new(option: &FixedBufferPanelOption, mut widget: T) -> OxiResult<Self> {
+        let window = NvimWindow::try_from((widget.buffer(), option))?;
+        widget.set_window(window.clone());
+        Ok(Self { window, widget })
     }
 }
 
@@ -81,7 +70,7 @@ impl TryFrom<&FixedBufferPanelOption> for NvimBuffer {
         Self::new(NvimBufferOption {
             buf_type: value.buf_type.to_string(),
             buf_listed: value.buf_listed,
-            // TODO FixedBufferVimWindow actually does not have to be wiped always, but we need to
+            // TODO FixedBufferPanel actually does not have to be wiped always, but we need to
             // think of ways to ensure that we don't get leftover hidden buffers.
             buf_hidden: "wipe".to_string(),
             swap_file: value.swap_file,
@@ -113,3 +102,4 @@ impl TryFrom<(&NvimBuffer, &FixedBufferPanelOption)> for NvimWindow {
         )
     }
 }
+

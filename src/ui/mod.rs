@@ -18,13 +18,13 @@ use nvim_oxi::{
 
 use crate::{
     chat::chat_process_count,
-    ui::widget::{NoWidget, Widget},
+    ui::widget::{BasicWidget, Widget},
 };
 use crate::{
     chat::{ChatProcess, get_or_create_chat_process, remove_chat_process},
     ui::{
         nvim_primitives::{
-            buffer::NvimKeymap,
+            buffer::{NvimBuffer, NvimKeymap},
             window::{NvimSplitWindowType, NvimWindowType},
         },
         panels::fixed::{FixedBufferPanel, FixedBufferPanelOption},
@@ -35,7 +35,7 @@ use crate::{
 
 pub struct ChatWindow {
     output_window: Arc<Mutex<Option<FixedBufferPanel<ChatDisplay>>>>,
-    input_window: Arc<Mutex<Option<FixedBufferPanel<NoWidget>>>>,
+    input_window: Arc<Mutex<Option<FixedBufferPanel<BasicWidget>>>>,
     /// Shared reference to the currently loaded chat process.
     /// The outer `RwLock` allows swapping the inner `Arc` when loading a different chat,
     /// so the renderer thread always reads from the current chat without closing windows.
@@ -116,7 +116,7 @@ impl ChatWindow {
     }
 
     pub fn send(&mut self) -> OxiResult<()> {
-        if let Some(mut input_win_buffer) = self.get_or_create_input_window()?.buffer.get_buffer() {
+        if let Some(mut input_win_buffer) = self.get_or_create_input_window()?.widget.buffer().get_buffer() {
             let lines = input_win_buffer.get_lines(0.., false)?;
             let message = lines
                 .map(|x| x.to_string())
@@ -212,22 +212,21 @@ impl ChatWindow {
         if let Ok(mut loaded) = self.loaded_chat_process.write() {
             *loaded = get_or_create_chat_process(index);
         }
-        if let Some(mut widget) = self.get_or_create_output_window()?.widget {
-            widget.switch_chat(ChatDisplayData {
-                chat_process: self
-                    .loaded_chat_process
-                    .read()
-                    .map_err(|_| {
-                        // TODO fix error handling
-                        nvim_oxi::Error::Mlua(mlua::Error::RuntimeError(
-                            "chat can't be read".to_string(),
-                        ))
-                    })?
-                    .clone(),
-                chat_index: self.loaded_chat_index.load(Ordering::SeqCst),
-            })?;
-            widget.render()?;
-        }
+        let mut panel = self.get_or_create_output_window()?;
+        panel.widget.switch_chat(ChatDisplayData {
+            chat_process: self
+                .loaded_chat_process
+                .read()
+                .map_err(|_| {
+                    // TODO fix error handling
+                    nvim_oxi::Error::Mlua(mlua::Error::RuntimeError(
+                        "chat can't be read".to_string(),
+                    ))
+                })?
+                .clone(),
+            chat_index: self.loaded_chat_index.load(Ordering::SeqCst),
+        })?;
+        panel.widget.render()?;
         Ok(())
     }
 
@@ -272,10 +271,10 @@ impl ChatWindow {
         Ok(())
     }
 
-    fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferPanel<NoWidget>> {
+    fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferPanel<BasicWidget>> {
         if let Ok(win) = self.input_window.lock()
             && let Some(win) = win.as_ref()
-            && win.buffer.get_buffer().is_some()
+            && win.widget.buffer().get_buffer().is_some()
             && win.window.get_window().is_some()
         {
             Ok(win.clone())
@@ -288,7 +287,7 @@ impl ChatWindow {
                 .unwrap();
             api::set_current_win(&output_window)?;
 
-            let input_win = FixedBufferPanel::new(FixedBufferPanelOption {
+            let option = FixedBufferPanelOption {
                 window_option: NvimWindowType::Split {
                     direction: NvimSplitWindowType::Bottom,
                     ratio_wh: 0.3,
@@ -346,7 +345,10 @@ impl ChatWindow {
                     },
                 ],
                 ..Default::default()
-            })?;
+            };
+            let buffer = NvimBuffer::try_from(&option)?;
+            let widget = BasicWidget::new(buffer);
+            let input_win = FixedBufferPanel::new(&option, widget)?;
 
             let augroup = api::create_augroup(
                 "TenonInOutLinkedWindows",
@@ -401,12 +403,12 @@ impl ChatWindow {
     fn get_or_create_output_window(&mut self) -> OxiResult<FixedBufferPanel<ChatDisplay>> {
         if let Ok(win) = self.output_window.lock()
             && let Some(win) = win.as_ref()
-            && win.buffer.get_buffer().is_some()
+            && win.widget.buffer().get_buffer().is_some()
             && win.window.get_window().is_some()
         {
             Ok(win.clone())
         } else {
-            let mut win = FixedBufferPanel::new(FixedBufferPanelOption {
+            let option = FixedBufferPanelOption {
                 window_option: NvimWindowType::Split {
                     direction: NvimSplitWindowType::Right,
                     ratio_wh: 0.4,
@@ -463,9 +465,10 @@ impl ChatWindow {
                 number: false,
                 relative_number: false,
                 ..Default::default()
-            })?;
-            let display = ChatDisplay::on_fixed_window(
-                win.clone(),
+            };
+            let buffer = NvimBuffer::try_from(&option)?;
+            let widget = ChatDisplay::new(
+                buffer,
                 ChatDisplayData {
                     chat_process: self
                         .loaded_chat_process
@@ -475,7 +478,8 @@ impl ChatWindow {
                     chat_index: self.loaded_chat_index.load(Ordering::SeqCst),
                 },
             );
-            win.attach_widget(display);
+            let mut win = FixedBufferPanel::new(&option, widget)?;
+            win.widget.render()?;
             self.output_window = Arc::new(Mutex::new(Some(win.clone())));
 
             Ok(win)

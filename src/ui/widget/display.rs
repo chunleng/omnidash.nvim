@@ -24,7 +24,6 @@ use crate::{
         TenonUserTextMessage, chat_process_count,
     },
     ui::{
-        panels::fixed::FixedBufferPanel,
         nvim_primitives::{buffer::NvimBuffer, window::NvimWindow},
         widget::Widget,
     },
@@ -48,7 +47,7 @@ struct RenderState {
 #[derive(Clone)]
 pub struct ChatDisplay {
     pub inner: Arc<NvimBuffer>,
-    pub attached_window: Arc<NvimWindow>,
+    attached_window: Option<Arc<NvimWindow>>,
     attached_chat: Arc<RwLock<ChatDisplayData>>,
     render_state: Arc<RwLock<RenderState>>,
     force_rerender: Arc<AtomicBool>,
@@ -57,10 +56,10 @@ pub struct ChatDisplay {
 }
 
 impl ChatDisplay {
-    pub fn on_fixed_window(win: FixedBufferPanel<Self>, chat: ChatDisplayData) -> Self {
+    pub fn new(buffer: NvimBuffer, chat: ChatDisplayData) -> Self {
         Self {
-            inner: Arc::new(win.buffer),
-            attached_window: Arc::new(win.window),
+            inner: Arc::new(buffer),
+            attached_window: None,
             attached_chat: Arc::new(RwLock::new(chat)),
             render_state: Arc::new(RwLock::new(RenderState::default())),
             force_rerender: Arc::new(AtomicBool::new(false)),
@@ -220,7 +219,8 @@ impl ChatDisplay {
                     };
 
                     if let Some(mut buffer) = inner.get_buffer()
-                        && let Some(mut window) = attached_window.get_window()
+                        && let Some(ref aw) = attached_window
+                        && let Some(mut window) = aw.get_window()
                     {
                         let tx_clone = tx.clone();
                         let render_state_clone_2 = render_state_clone.clone();
@@ -355,6 +355,14 @@ impl Widget for ChatDisplay {
         self.spawn_refresh_display_thread()?;
 
         Ok(())
+    }
+
+    fn buffer(&self) -> &NvimBuffer {
+        &self.inner
+    }
+
+    fn set_window(&mut self, window: NvimWindow) {
+        self.attached_window = Some(Arc::new(window));
     }
 }
 

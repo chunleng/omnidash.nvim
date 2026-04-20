@@ -7,7 +7,7 @@ use serde_json::json;
 use std::path::Path;
 
 #[derive(Deserialize)]
-pub struct ListFileArgs {
+pub struct ListFilesArgs {
     pub pattern: String,
     #[serde(default)]
     pub path: Option<String>,
@@ -18,17 +18,17 @@ pub struct ListFileArgs {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
-pub struct ListFile;
+pub struct ListFiles;
 
-impl Tool for ListFile {
-    const NAME: &'static str = "list_file";
+impl Tool for ListFiles {
+    const NAME: &'static str = "list_files";
     type Error = ToolError;
-    type Args = ListFileArgs;
+    type Args = ListFilesArgs;
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
-            name: "list_file".to_string(),
+            name: "list_files".to_string(),
             description: "List files matching glob. JSON: files[] + metadata.".to_string(),
             parameters: json!({
                 "type": "object",

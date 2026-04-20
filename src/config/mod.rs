@@ -45,7 +45,7 @@ impl Default for TenonConfig {
                     "create_file",
                     "edit_file",
                     "fetch_webpage",
-                    "list_file",
+                    "list_files",
                     "read_file",
                     "remove_path",
                     "search_text",

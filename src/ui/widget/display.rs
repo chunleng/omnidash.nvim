@@ -24,7 +24,7 @@ use crate::{
         TenonUserTextMessage, chat_process_count,
     },
     ui::{
-        components::FixedBufferVimWindow,
+        panels::fixed::FixedBufferPanel,
         nvim_primitives::{buffer::NvimBuffer, window::NvimWindow},
         widget::Widget,
     },
@@ -53,11 +53,11 @@ pub struct ChatDisplay {
     render_state: Arc<RwLock<RenderState>>,
     force_rerender: Arc<AtomicBool>,
     spinner_frame: Arc<AtomicUsize>,
-    pp: Option<Arc<JoinHandle<()>>>,
+    running_thread: Option<Arc<JoinHandle<()>>>,
 }
 
 impl ChatDisplay {
-    pub fn on_fixed_window(win: FixedBufferVimWindow<Self>, chat: ChatDisplayData) -> Self {
+    pub fn on_fixed_window(win: FixedBufferPanel<Self>, chat: ChatDisplayData) -> Self {
         Self {
             inner: Arc::new(win.buffer),
             attached_window: Arc::new(win.window),
@@ -65,7 +65,7 @@ impl ChatDisplay {
             render_state: Arc::new(RwLock::new(RenderState::default())),
             force_rerender: Arc::new(AtomicBool::new(false)),
             spinner_frame: Arc::new(AtomicUsize::new(0)),
-            pp: None,
+            running_thread: None,
         }
     }
 
@@ -293,7 +293,7 @@ impl ChatDisplay {
                 }
             }
         })?;
-        self.pp = Some(Arc::new(spawn({
+        self.running_thread = Some(Arc::new(spawn({
             let inner = self.inner.clone();
             let chat = self.attached_chat.clone();
             let force_rerender = self.force_rerender.clone();
@@ -341,7 +341,7 @@ impl ChatDisplay {
 
 impl Widget for ChatDisplay {
     fn render(&mut self) -> OxiResult<()> {
-        if self.pp.is_some() {
+        if self.running_thread.is_some() {
             if let Ok(mut state) = self.render_state.write() {
                 *state = RenderState::default();
             }

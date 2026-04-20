@@ -1,5 +1,5 @@
-mod components;
 mod nvim_primitives;
+mod panels;
 mod widget;
 
 use std::sync::{
@@ -23,19 +23,19 @@ use crate::{
 use crate::{
     chat::{ChatProcess, get_or_create_chat_process, remove_chat_process},
     ui::{
-        components::{FixedBufferVimWindow, FixedBufferVimWindowOption},
         nvim_primitives::{
             buffer::NvimKeymap,
             window::{NvimSplitWindowType, NvimWindowType},
         },
+        panels::fixed::{FixedBufferPanel, FixedBufferPanelOption},
         widget::display::{ChatDisplay, ChatDisplayData},
     },
     utils::notify,
 };
 
 pub struct ChatWindow {
-    output_window: Arc<Mutex<Option<FixedBufferVimWindow<ChatDisplay>>>>,
-    input_window: Arc<Mutex<Option<FixedBufferVimWindow<NoWidget>>>>,
+    output_window: Arc<Mutex<Option<FixedBufferPanel<ChatDisplay>>>>,
+    input_window: Arc<Mutex<Option<FixedBufferPanel<NoWidget>>>>,
     /// Shared reference to the currently loaded chat process.
     /// The outer `RwLock` allows swapping the inner `Arc` when loading a different chat,
     /// so the renderer thread always reads from the current chat without closing windows.
@@ -272,7 +272,7 @@ impl ChatWindow {
         Ok(())
     }
 
-    fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferVimWindow<NoWidget>> {
+    fn get_or_create_input_window(&mut self) -> OxiResult<FixedBufferPanel<NoWidget>> {
         if let Ok(win) = self.input_window.lock()
             && let Some(win) = win.as_ref()
             && win.buffer.get_buffer().is_some()
@@ -288,7 +288,7 @@ impl ChatWindow {
                 .unwrap();
             api::set_current_win(&output_window)?;
 
-            let input_win = FixedBufferVimWindow::new(FixedBufferVimWindowOption {
+            let input_win = FixedBufferPanel::new(FixedBufferPanelOption {
                 window_option: NvimWindowType::Split {
                     direction: NvimSplitWindowType::Bottom,
                     ratio_wh: 0.3,
@@ -398,7 +398,7 @@ impl ChatWindow {
         }
     }
 
-    fn get_or_create_output_window(&mut self) -> OxiResult<FixedBufferVimWindow<ChatDisplay>> {
+    fn get_or_create_output_window(&mut self) -> OxiResult<FixedBufferPanel<ChatDisplay>> {
         if let Ok(win) = self.output_window.lock()
             && let Some(win) = win.as_ref()
             && win.buffer.get_buffer().is_some()
@@ -406,7 +406,7 @@ impl ChatWindow {
         {
             Ok(win.clone())
         } else {
-            let mut win = FixedBufferVimWindow::new(FixedBufferVimWindowOption {
+            let mut win = FixedBufferPanel::new(FixedBufferPanelOption {
                 window_option: NvimWindowType::Split {
                     direction: NvimSplitWindowType::Right,
                     ratio_wh: 0.4,

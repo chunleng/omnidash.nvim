@@ -3,6 +3,7 @@ pub mod edit_file;
 pub mod fetch_webpage;
 pub mod list_file;
 pub mod read_file;
+pub mod remove_path;
 pub mod search_text;
 pub mod web_search;
 
@@ -12,6 +13,7 @@ pub use edit_file::EditFile;
 pub use fetch_webpage::FetchWebpage;
 pub use list_file::ListFile;
 pub use read_file::ReadFile;
+pub use remove_path::RemovePath;
 pub use search_text::SearchText;
 use rig::{tool::ToolDyn, tools::ThinkTool};
 pub use web_search::WebSearch;
@@ -19,7 +21,7 @@ pub use web_search::WebSearch;
 /// Resolve a list of tool name strings into concrete `Box<dyn ToolDyn>` instances.
 ///
 /// Built-in names: "create_file", "edit_file", "fetch_webpage",
-/// "list_file", "read_file", "web_search", "think".
+/// "list_file", "read_file", "remove_path", "web_search", "think".
 /// MCP tool names: "server_name.tool_name" for a specific tool,
 /// or "server_name" to include all tools from that server.
 pub fn resolve_tools(names: &[impl AsRef<str>]) -> Vec<Box<dyn ToolDyn>> {
@@ -45,6 +47,10 @@ pub fn resolve_tools(names: &[impl AsRef<str>]) -> Vec<Box<dyn ToolDyn>> {
         (
             "read_file".to_string(),
             Box::new(ReadFile) as Box<dyn ToolDyn>,
+        ),
+        (
+            "remove_path".to_string(),
+            Box::new(RemovePath) as Box<dyn ToolDyn>,
         ),
         (
             "search_text".to_string(),

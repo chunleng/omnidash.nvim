@@ -57,11 +57,22 @@ impl Tool for ReadFile {
                 let start = args.start_line.unwrap_or(1).saturating_sub(1);
                 let end = args.end_line.unwrap_or(total_lines).min(total_lines);
 
+                if end <= start {
+                    return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "end_line {} <= start_line {}",
+                            end,
+                            start + 1
+                        ),
+                    ))));
+                }
+
                 if start >= total_lines {
                     return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!(
-                            "start_line {} exceeds file length of {} lines",
+                            "start_line {} > file_len {}",
                             start + 1,
                             total_lines
                         ),
@@ -78,7 +89,7 @@ impl Tool for ReadFile {
             }
             Err(e) => Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
                 e.kind(),
-                format!("Failed to read file '{}': {}", args.filepath, e),
+                format!("read_file '{}': {}", args.filepath, e),
             )))),
         }
     }

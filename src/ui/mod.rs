@@ -208,6 +208,7 @@ impl ChatWindow {
         {
             win.close(true)?;
         }
+        api::command("stopinsert")?;
 
         Ok(())
     }
@@ -433,6 +434,7 @@ impl ChatWindow {
                             if output_window.is_valid() {
                                 let _ = output_window.close(true);
                             }
+                            let _ = api::command("stopinsert");
                             false
                         }
                     })
@@ -451,6 +453,7 @@ impl ChatWindow {
                             {
                                 let _ = win.close(true);
                             }
+                            let _ = api::command("stopinsert");
                             false
                         }
                     })

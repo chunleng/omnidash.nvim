@@ -252,7 +252,9 @@ impl ChatWindow {
     /// Creates a new chat and loads it.
     pub fn new_chat(&mut self) -> OxiResult<()> {
         let new_index = chat_process_count();
-        self.load_chat(new_index)
+        self.load_chat(new_index)?;
+        self.focus_input_window()?;
+        Ok(())
     }
 
     /// Dismisses the current chat. If it was the last one, creates a new

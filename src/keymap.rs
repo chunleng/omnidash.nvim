@@ -17,6 +17,7 @@ pub fn create_lua_keymap_module() -> Dictionary {
     keymap_dict.insert("dismiss_chat", Object::from(dismiss_chat_fn()));
     keymap_dict.insert("stop_streaming", Object::from(stop_streaming_fn()));
     keymap_dict.insert("select_agent", Object::from(select_agent_fn()));
+    keymap_dict.insert("select_model", Object::from(select_model_fn()));
     keymap_dict.insert("select_tools", Object::from(select_tools_fn()));
     keymap_dict.insert("toggle_focus", Object::from(toggle_focus_fn()));
 
@@ -186,6 +187,60 @@ fn select_agent_fn() -> Function<(), ()> {
                                             name: name.clone(),
                                             inner: agent.clone(),
                                         };
+                                        win.force_render();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => {}
+                },
+            ) {
+                GLOBAL_EXECUTION_HANDLER
+                    .notify_on_main_thread(format!("picker error: {}", e), LogLevel::Error);
+            }
+        }
+    })
+}
+
+fn select_model_fn() -> Function<(), ()> {
+    Function::from_fn({
+        move |()| {
+            let config = get_application_config();
+            let model_list: Vec<String> = config
+                .models
+                .iter()
+                .map(|m| m.display_name())
+                .collect();
+
+            let current_model_display: Option<String> = (|| {
+                let win_arc = get_chat_window();
+                let win = win_arc.lock().ok()?;
+                let loaded = win.loaded_chat_process.read().ok()?;
+                let process = loaded.read().ok()?;
+                Some(process.active_agent.inner.model.display_name())
+            })();
+
+            let options: Vec<&str> = model_list.iter().map(|s| s.as_str()).collect();
+
+            if let Err(e) = pick(
+                "Select Model",
+                &options,
+                current_model_display.as_deref(),
+                |selected| match selected {
+                    Some(display_name) => {
+                        let config = get_application_config();
+                        if let Some(model) = config
+                            .models
+                            .iter()
+                            .find(|m| m.display_name() == display_name)
+                            .cloned()
+                        {
+                            let win_arc = get_chat_window();
+                            if let Ok(win) = win_arc.lock() {
+                                if let Ok(loaded) = win.loaded_chat_process.read() {
+                                    if let Ok(mut process) = loaded.write() {
+                                        process.active_agent.inner.model = model;
                                         win.force_render();
                                     }
                                 }

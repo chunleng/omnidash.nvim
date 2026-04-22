@@ -170,19 +170,34 @@ impl ChatDisplay {
                         format!("{} of {}", idx + 1, total)
                     };
                     let agent_name = chat_process.active_agent.name.clone();
+                    let model_display = chat_process.active_agent.inner.model.display_name();
                     drop(chat_process);
                     drop(chat);
                     let added = tool_added_clone.load(Ordering::SeqCst);
                     let removed = tool_removed_clone.load(Ordering::SeqCst);
-                    let tool_diff = match (added, removed) {
+                    let default_model_display = {
+                        let config = get_application_config();
+                        config
+                            .agents
+                            .get(&agent_name)
+                            .map(|a| a.model.display_name())
+                    };
+                    let model_changed = default_model_display.as_ref() != Some(&model_display);
+                    let tool_suffix = match (added, removed) {
                         (0, 0) => String::new(),
-                        (a, 0) => format!(" (󰣖 +{})", a),
-                        (0, r) => format!(" (󰣖 -{})", r),
-                        (a, r) => format!(" (󰣖 +{}/-{})", a, r),
+                        (a, 0) => format!("󰣖 +{}", a),
+                        (0, r) => format!("󰣖 -{}", r),
+                        (a, r) => format!("󰣖 +{}/-{}", a, r),
+                    };
+                    let meta_suffix = match (model_changed, tool_suffix.is_empty()) {
+                        (true, true) => format!(" (󰚩 {})", model_display),
+                        (true, false) => format!(" (󰚩 {} | {})", model_display, tool_suffix),
+                        (false, true) => String::new(),
+                        (false, false) => format!(" ({})", tool_suffix),
                     };
                     content.push(format!(
                         "󰭹  {}, agent: {}{}",
-                        chat_index_display, agent_name, tool_diff
+                        chat_index_display, agent_name, meta_suffix
                     ));
                     let spinner_buf_line = frozen_line_count + content.len() - 1;
 

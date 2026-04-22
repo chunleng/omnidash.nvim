@@ -30,6 +30,7 @@ pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
     pub default_agent: String,
+    pub models: Vec<SupportedModels>,
     pub tools: ToolsConfig,
 }
 
@@ -48,15 +49,16 @@ impl Default for TenonConfig {
                 api_key: std::env::var("ZAI_API_KEY").unwrap_or_default(),
             }),
         );
+        let default_model = SupportedModels {
+            config: ollama_cloud_provider.clone(),
+            model_name: "glm-5.1".to_string(),
+        };
         let mut default_agents: HashMap<String, TenonAgent> = HashMap::new();
         let default_agent_name = "default".to_string();
         default_agents.insert(
             default_agent_name.clone(),
             TenonAgent::new(
-                SupportedModels {
-                    config: ollama_cloud_provider,
-                    model_name: "glm-5.1".to_string(),
-                },
+                default_model.clone(),
                 vec![],
                 &[
                     "create_file",
@@ -75,6 +77,7 @@ impl Default for TenonConfig {
             connectors: default_providers,
             agents: default_agents,
             default_agent: default_agent_name,
+            models: vec![default_model],
             tools: ToolsConfig::default(),
         }
     }

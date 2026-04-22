@@ -14,6 +14,7 @@ use crate::{
 pub struct TenonUserConfig {
     pub connectors: Option<HashMap<String, ProviderConfig>>,
     pub agents: Option<HashMap<String, TenonAgentConfig>>,
+    pub models: Option<Vec<ModelConfig>>,
     pub tools: Option<ToolsUserConfig>,
 }
 
@@ -108,6 +109,24 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
                     }));
                 }
             }
+        }
+
+        if let Some(models) = value.models {
+            conf.models = models
+                .into_iter()
+                .map(|m| -> Result<SupportedModels, nvim_oxi::Error> {
+                    let provider_config: &ProviderConfig =
+                        conf.connectors.get(&m.connector).ok_or(
+                            nvim_oxi::Error::Deserialize(DeserializeError::Custom {
+                                msg: format!("unknown connector for model: {}", m.connector),
+                            }),
+                        )?;
+                    Ok(SupportedModels {
+                        config: provider_config.to_owned(),
+                        model_name: m.name,
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
         }
 
         if let Some(tools) = value.tools {

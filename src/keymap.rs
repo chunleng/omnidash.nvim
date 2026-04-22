@@ -128,24 +128,19 @@ fn select_tools_fn() -> Function<(), ()> {
                 let current_refs: Vec<&str> =
                     current_tool_names.iter().map(|s| s.as_str()).collect();
 
-                if let Err(e) = pick_multi(
-                    "Select Tools",
-                    &options,
-                    &current_refs,
-                    |selected| {
-                        if let Some(tools) = selected {
-                            let win_arc = get_chat_window();
-                            if let Ok(win) = win_arc.lock() {
-                                if let Ok(loaded) = win.loaded_chat_process.read() {
-                                    if let Ok(mut process) = loaded.write() {
-                                        process.active_agent.inner.tool_names = tools;
-                                        win.force_render();
-                                    }
+                if let Err(e) = pick_multi("Select Tools", &options, &current_refs, |selected| {
+                    if let Some(tools) = selected {
+                        let win_arc = get_chat_window();
+                        if let Ok(win) = win_arc.lock() {
+                            if let Ok(loaded) = win.loaded_chat_process.read() {
+                                if let Ok(mut process) = loaded.write() {
+                                    process.active_agent.inner.tool_names = tools;
+                                    win.force_render();
                                 }
                             }
                         }
-                    },
-                ) {
+                    }
+                }) {
                     GLOBAL_EXECUTION_HANDLER
                         .notify_on_main_thread(format!("picker error: {}", e), LogLevel::Error);
                 }
@@ -207,11 +202,7 @@ fn select_model_fn() -> Function<(), ()> {
     Function::from_fn({
         move |()| {
             let config = get_application_config();
-            let model_list: Vec<String> = config
-                .models
-                .iter()
-                .map(|m| m.display_name())
-                .collect();
+            let model_list: Vec<String> = config.models.iter().map(|m| m.display_name()).collect();
 
             let current_model_display: Option<String> = (|| {
                 let win_arc = get_chat_window();

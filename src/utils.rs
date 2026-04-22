@@ -161,9 +161,7 @@ impl NeovimExecutionHandler {
     pub fn execute_on_main_thread_async(&self, lua_code: &str) -> OxiResult<Value> {
         let (tx, rx) = mpsc::channel::<String>();
 
-        self.async_sender
-            .send((lua_code.to_string(), tx))
-            .unwrap();
+        self.async_sender.send((lua_code.to_string(), tx)).unwrap();
         self.async_handle.send()?;
 
         rx.recv()
@@ -186,4 +184,3 @@ impl NeovimExecutionHandler {
         let _ = self.execute_on_main_thread(&lua_code);
     }
 }
-

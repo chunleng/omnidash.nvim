@@ -103,4 +103,3 @@ impl TryFrom<(&NvimBuffer, &FixedBufferPanelOption)> for NvimWindow {
         )
     }
 }
-

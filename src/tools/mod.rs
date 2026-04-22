@@ -15,8 +15,8 @@ pub use fetch_webpage::FetchWebpage;
 pub use list_files::ListFiles;
 pub use read_file::ReadFile;
 pub use remove_path::RemovePath;
-pub use run::Run;
 use rig::{tool::ToolDyn, tools::ThinkTool};
+pub use run::Run;
 pub use search_text::SearchText;
 pub use web_search::WebSearch;
 
@@ -109,10 +109,7 @@ pub fn resolve_tools(names: &[impl AsRef<str>]) -> Vec<Box<dyn ToolDyn>> {
             "remove_path".to_string(),
             Box::new(RemovePath) as Box<dyn ToolDyn>,
         ),
-        (
-            "run".to_string(),
-            Box::new(Run) as Box<dyn ToolDyn>,
-        ),
+        ("run".to_string(), Box::new(Run) as Box<dyn ToolDyn>),
         (
             "search_text".to_string(),
             Box::new(SearchText) as Box<dyn ToolDyn>,

@@ -329,4 +329,3 @@ impl Tool for SearchText {
         }))
     }
 }
-

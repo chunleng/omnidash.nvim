@@ -60,22 +60,14 @@ impl Tool for ReadFile {
                 if end <= start {
                     return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
-                        format!(
-                            "end_line {} <= start_line {}",
-                            end,
-                            start + 1
-                        ),
+                        format!("end_line {} <= start_line {}", end, start + 1),
                     ))));
                 }
 
                 if start >= total_lines {
                     return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
-                        format!(
-                            "start_line {} > file_len {}",
-                            start + 1,
-                            total_lines
-                        ),
+                        format!("start_line {} > file_len {}", start + 1, total_lines),
                     ))));
                 }
 

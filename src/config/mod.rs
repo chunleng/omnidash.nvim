@@ -38,7 +38,7 @@ impl Default for TenonConfig {
                     config: ollama_cloud_provider,
                     model_name: "glm-5.1".to_string(),
                 },
-                None,
+                vec![],
                 &[
                     "create_file",
                     "edit_file",

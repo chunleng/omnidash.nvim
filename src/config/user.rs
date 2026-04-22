@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     chat::TenonAgent,
-    clients::{ProviderConfig, SupportedModels},
+    clients::{BehaviorSource, ProviderConfig, SupportedModels},
     config::TenonConfig,
 };
 
@@ -20,7 +20,7 @@ pub struct TenonUserConfig {
 pub struct TenonAgentConfig {
     model: ModelConfig,
     #[serde(default)]
-    preamble: Option<String>,
+    behavior: Vec<BehaviorSource>,
     #[serde(default)]
     tool_names: Vec<String>,
     #[serde(default)]
@@ -81,7 +81,7 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
                                 config: model_config.to_owned(),
                                 model_name: v.model.name,
                             },
-                            v.preamble,
+                            v.behavior,
                             &v.tool_names,
                         ),
                     ))

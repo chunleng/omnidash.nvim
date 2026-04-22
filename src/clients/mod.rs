@@ -9,6 +9,39 @@ use rig::{
 };
 use serde::Deserialize;
 
+/// Describes where a behavior comes from: an inline string or a file path.
+///
+/// When `BehaviorSource::File` is used with a relative path, it is resolved
+/// relative to the current working directory.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+pub enum BehaviorSource {
+    /// An inline string.
+    Text { value: String },
+    /// A file path. Relative paths are resolved against the current working directory.
+    File { path: std::path::PathBuf },
+}
+
+impl BehaviorSource {
+    /// Resolve the source into its final string content.
+    ///
+    /// For `Text` this returns the value directly.
+    /// For `File` this reads the file contents, resolving relative paths against CWD.
+    pub fn resolve(&self) -> Result<String, std::io::Error> {
+        match self {
+            BehaviorSource::Text { value } => Ok(value.clone()),
+            BehaviorSource::File { path } => {
+                let resolved = if path.is_absolute() {
+                    path.clone()
+                } else {
+                    std::env::current_dir()?.join(path)
+                };
+                std::fs::read_to_string(&resolved)
+            }
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SupportedModels {
@@ -250,28 +283,52 @@ impl ChatAgent {
 
 pub fn get_agent(
     model: SupportedModels,
-    preamble: Option<String>,
+    behavior: Vec<BehaviorSource>,
     tools: Vec<Box<dyn ToolDyn>>,
 ) -> ChatAgent {
+    let resolved_behavior = if behavior.is_empty() {
+        None
+    } else {
+        Some(
+            behavior
+                .into_iter()
+                .map(|p| p.resolve())
+                .collect::<Result<Vec<_>, _>>()
+                .expect("failed to resolve behavior")
+                .join("\n"),
+        )
+    };
     match model.config {
-        ProviderConfig::Ollama(config) => {
-            ChatAgent::Ollama(get_ollama_agent(config, model.model_name, preamble, tools))
-        }
-        ProviderConfig::Gemini(config) => {
-            ChatAgent::Gemini(get_gemini_agent(config, model.model_name, preamble, tools))
-        }
-        ProviderConfig::OpenAI(config) => {
-            ChatAgent::OpenAI(get_openai_agent(config, model.model_name, preamble, tools))
-        }
+        ProviderConfig::Ollama(config) => ChatAgent::Ollama(get_ollama_agent(
+            config,
+            model.model_name,
+            resolved_behavior,
+            tools,
+        )),
+        ProviderConfig::Gemini(config) => ChatAgent::Gemini(get_gemini_agent(
+            config,
+            model.model_name,
+            resolved_behavior,
+            tools,
+        )),
+        ProviderConfig::OpenAI(config) => ChatAgent::OpenAI(get_openai_agent(
+            config,
+            model.model_name,
+            resolved_behavior,
+            tools,
+        )),
         ProviderConfig::Anthropic(config) => ChatAgent::Anthropic(get_anthropic_agent(
             config,
             model.model_name,
-            preamble,
+            resolved_behavior,
             tools,
         )),
-        ProviderConfig::Bedrock(config) => {
-            ChatAgent::Bedrock(get_bedrock_agent(config, model.model_name, preamble, tools))
-        }
+        ProviderConfig::Bedrock(config) => ChatAgent::Bedrock(get_bedrock_agent(
+            config,
+            model.model_name,
+            resolved_behavior,
+            tools,
+        )),
     }
 }
 

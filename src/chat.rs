@@ -1,5 +1,5 @@
 use crate::{
-    clients::{ChatAgent, StreamItem, SupportedModels, get_agent},
+    clients::{BehaviorSource, ChatAgent, StreamItem, SupportedModels, get_agent},
     get_application_config,
     tools::resolve_tools,
     utils::GLOBAL_EXECUTION_HANDLER,
@@ -189,34 +189,33 @@ impl std::ops::Deref for ActiveAgent {
 #[derive(Debug, Clone)]
 pub struct TenonAgent {
     pub model: SupportedModels,
-    pub preamble: Option<String>,
+    pub behavior: Vec<BehaviorSource>,
     pub tool_names: Vec<String>,
 }
+
+const SYSTEM_BEHAVIOR: &str = "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
+    User may edit files between steps → files change silently. File state ≠ before? → user likely edited. Think why. \
+    Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours.";
 
 impl TenonAgent {
     pub fn new(
         model: SupportedModels,
-        preamble: Option<String>,
+        behavior: Vec<BehaviorSource>,
         tools: &[impl AsRef<str>],
     ) -> Self {
-        let mut target_preamble =
-            "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
-            User may edit files between steps → files change silently. File state ≠ before? → user likely edited. Think why. \
-            Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours."
-                .to_string();
-        if let Some(p) = preamble {
-            target_preamble = format!("{}\n{}", target_preamble, p);
-        }
-
         Self {
             model,
-            preamble: Some(target_preamble),
+            behavior,
             tool_names: tools.iter().map(|t| t.as_ref().to_string()).collect(),
         }
     }
 
     pub fn build_chat_adapter(&self, tools: Vec<Box<dyn ToolDyn>>) -> ChatAgent {
-        get_agent(self.model.clone(), self.preamble.clone(), tools)
+        let mut combined = vec![BehaviorSource::Text {
+            value: SYSTEM_BEHAVIOR.to_string(),
+        }];
+        combined.extend(self.behavior.iter().cloned());
+        get_agent(self.model.clone(), combined, tools)
     }
 }
 

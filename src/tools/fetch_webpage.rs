@@ -1,4 +1,4 @@
-use crate::clients::get_agent;
+use crate::clients::{BehaviorSource, get_agent};
 use crate::get_application_config;
 use html_to_markdown_rs::{ConversionOptions, PreprocessingOptions, PreprocessingPreset};
 use rig::completion::ToolDefinition;
@@ -95,10 +95,11 @@ async fn answer_with_prompt(markdown: &str, prompt: &str) -> Result<String, Tool
         )))
     })?;
 
-    let preamble = "Use only webpage content. No preamble/hedge/commentary/source refs. Preserve format: code→code blocks, steps→numbered lists, comparisons→tables, items→bullets. Answer directly."
-        .to_string();
+    let behavior = BehaviorSource::Text {
+        value: "Use only webpage content. No preamble/hedge/commentary/source refs. Preserve format: code→code blocks, steps→numbered lists, comparisons→tables, items→bullets. Answer directly.".to_string(),
+    };
 
-    let agent = get_agent(agent_config.model.clone(), Some(preamble), vec![]);
+    let agent = get_agent(agent_config.model.clone(), vec![behavior], vec![]);
 
     let user_message = format!("{}\n\nWebpage content:\n\n{}", prompt, markdown);
 

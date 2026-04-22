@@ -22,6 +22,13 @@ pub struct TenonUserConfig {
 #[serde(deny_unknown_fields)]
 pub struct ToolsUserConfig {
     pub fetch_webpage: Option<FetchWebpageUserConfig>,
+    pub run: Option<RunUserConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunUserConfig {
+    pub whitelist: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -146,6 +153,9 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
                         model_name: model.name,
                     });
                 }
+            }
+            if let Some(run) = tools.run {
+                conf.tools.run.whitelist = run.whitelist;
             }
         }
 

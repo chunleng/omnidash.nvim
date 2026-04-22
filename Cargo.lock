@@ -2719,6 +2719,7 @@ dependencies = [
  "rig-core",
  "serde",
  "serde_json",
+ "shlex",
  "tokio",
 ]
 

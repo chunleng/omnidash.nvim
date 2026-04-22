@@ -10,12 +10,14 @@ pub mod user;
 #[derive(Debug, Clone)]
 pub struct ToolsConfig {
     pub fetch_webpage: FetchWebpageConfig,
+    pub run: RunConfig,
 }
 
 impl Default for ToolsConfig {
     fn default() -> Self {
         Self {
             fetch_webpage: FetchWebpageConfig { model: None },
+            run: RunConfig::default(),
         }
     }
 }
@@ -23,6 +25,11 @@ impl Default for ToolsConfig {
 #[derive(Debug, Clone, Default)]
 pub struct FetchWebpageConfig {
     pub model: Option<SupportedModels>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RunConfig {
+    pub whitelist: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +74,7 @@ impl Default for TenonConfig {
                     "list_files",
                     "read_file",
                     "remove_path",
+                    "run",
                     "search_text",
                     "web_search",
                     "think",

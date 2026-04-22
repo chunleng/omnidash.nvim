@@ -36,7 +36,11 @@ impl BehaviorSource {
                 } else {
                     std::env::current_dir()?.join(path)
                 };
-                std::fs::read_to_string(&resolved)
+                if resolved.exists() {
+                    std::fs::read_to_string(&resolved)
+                } else {
+                    Ok("".to_string())
+                }
             }
         }
     }

@@ -14,6 +14,19 @@ use crate::{
 pub struct TenonUserConfig {
     pub connectors: Option<HashMap<String, ProviderConfig>>,
     pub agents: Option<HashMap<String, TenonAgentConfig>>,
+    pub tools: Option<ToolsUserConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolsUserConfig {
+    pub fetch_webpage: Option<FetchWebpageUserConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FetchWebpageUserConfig {
+    pub model: Option<ModelConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,7 +41,7 @@ pub struct TenonAgentConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct ModelConfig {
+pub struct ModelConfig {
     connector: String,
     name: String,
 }
@@ -93,6 +106,26 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
                     return Err(nvim_oxi::Error::Deserialize(DeserializeError::Custom {
                         msg: "at least one agent needs to be set as default".to_string(),
                     }));
+                }
+            }
+        }
+
+        if let Some(tools) = value.tools {
+            if let Some(fetch_webpage) = tools.fetch_webpage {
+                if let Some(model) = fetch_webpage.model {
+                    let provider_config: &ProviderConfig =
+                        conf.connectors.get(&model.connector).ok_or(
+                            nvim_oxi::Error::Deserialize(DeserializeError::Custom {
+                                msg: format!(
+                                    "unknown connector for fetch_webpage model: {}",
+                                    model.connector
+                                ),
+                            }),
+                        )?;
+                    conf.tools.fetch_webpage.model = Some(SupportedModels {
+                        config: provider_config.to_owned(),
+                        model_name: model.name,
+                    });
                 }
             }
         }

@@ -88,18 +88,24 @@ impl Tool for FetchWebpage {
 
 async fn answer_with_prompt(markdown: &str, prompt: &str) -> Result<String, ToolError> {
     let config = get_application_config();
-    let agent_config = config.agents.get(&config.default_agent).ok_or_else(|| {
-        ToolError::ToolCallError(Box::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No default agent",
-        )))
-    })?;
+    let model = match &config.tools.fetch_webpage.model {
+        Some(m) => m.clone(),
+        None => {
+            let agent_config = config.agents.get(&config.default_agent).ok_or_else(|| {
+                ToolError::ToolCallError(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No default agent",
+                )))
+            })?;
+            agent_config.model.clone()
+        }
+    };
 
     let behavior = BehaviorSource::Text {
         value: "Use only webpage content. No preamble/hedge/commentary/source refs. Preserve format: code→code blocks, steps→numbered lists, comparisons→tables, items→bullets. Answer directly.".to_string(),
     };
 
-    let agent = get_agent(agent_config.model.clone(), vec![behavior], vec![]);
+    let agent = get_agent(model, vec![behavior], vec![]);
 
     let user_message = format!("{}\n\nWebpage content:\n\n{}", prompt, markdown);
 

@@ -8,10 +8,29 @@ use crate::{
 pub mod user;
 
 #[derive(Debug, Clone)]
+pub struct ToolsConfig {
+    pub fetch_webpage: FetchWebpageConfig,
+}
+
+impl Default for ToolsConfig {
+    fn default() -> Self {
+        Self {
+            fetch_webpage: FetchWebpageConfig { model: None },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FetchWebpageConfig {
+    pub model: Option<SupportedModels>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
     pub default_agent: String,
+    pub tools: ToolsConfig,
 }
 
 impl Default for TenonConfig {
@@ -56,6 +75,7 @@ impl Default for TenonConfig {
             connectors: default_providers,
             agents: default_agents,
             default_agent: default_agent_name,
+            tools: ToolsConfig::default(),
         }
     }
 }

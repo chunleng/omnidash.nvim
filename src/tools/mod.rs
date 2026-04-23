@@ -48,6 +48,7 @@ pub fn tool_display_summary(name: &str, args: &Value) -> Option<String> {
         } else {
             x.to_string()
         };
+        let display = display.lines().collect::<Vec<_>>().join("↵");
         format!("{}: {}", core_arg, display)
     })
 }

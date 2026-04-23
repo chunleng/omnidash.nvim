@@ -54,6 +54,13 @@ impl Tool for ReadFile {
                 let lines: Vec<&str> = content.lines().collect();
                 let total_lines = lines.len();
 
+                if total_lines == 0 {
+                    return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("read_file '{}': file empty", args.filepath),
+                    ))));
+                }
+
                 let start = args.start_line.unwrap_or(1).saturating_sub(1);
                 let end = args.end_line.unwrap_or(total_lines).min(total_lines);
 

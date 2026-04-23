@@ -35,9 +35,21 @@ pub fn tool_display_summary(name: &str, args: &Value) -> Option<String> {
         "run" => "command",
         _ => return None,
     };
-    args.get(core_arg)
-        .and_then(|v| v.as_str())
-        .map(|x| format!("{}: {}", core_arg, x))
+    args.get(core_arg).and_then(|v| v.as_str()).map(|x| {
+        let display = if core_arg == "filepath" {
+            std::env::current_dir()
+                .ok()
+                .and_then(|cwd| {
+                    let cwd_str = cwd.to_string_lossy();
+                    x.strip_prefix(cwd_str.as_ref())
+                        .map(|rest| format!("./{}", rest.trim_start_matches('/')))
+                })
+                .unwrap_or_else(|| x.to_string())
+        } else {
+            x.to_string()
+        };
+        format!("{}: {}", core_arg, display)
+    })
 }
 
 /// Returns the names of all available tools (built-in + MCP).

@@ -20,6 +20,26 @@ pub use run::Run;
 pub use search_text::SearchText;
 pub use web_search::WebSearch;
 
+use serde_json::Value;
+
+/// Returns a short human-readable summary of what a tool call is doing,
+/// by extracting the core parameter from its args JSON.
+///
+/// Returns `None` for tools with no useful display arg (e.g. "think", MCP tools).
+pub fn tool_display_summary(name: &str, args: &Value) -> Option<String> {
+    let core_arg: &str = match name {
+        "web_search" => "query",
+        "read_file" | "edit_file" | "create_file" | "remove_path" => "filepath",
+        "list_files" | "search_text" => "pattern",
+        "fetch_webpage" => "url",
+        "run" => "command",
+        _ => return None,
+    };
+    args.get(core_arg)
+        .and_then(|v| v.as_str())
+        .map(|x| format!("{}: {}", core_arg, x))
+}
+
 /// Returns the names of all available tools (built-in + MCP).
 ///
 /// Built-in names: "create_file", "edit_file", "fetch_webpage",

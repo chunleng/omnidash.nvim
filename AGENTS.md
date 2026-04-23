@@ -150,3 +150,15 @@ Also add entry to the `all_tools` vec inside `resolve_tools()`:
     Box::new(MyTool) as Box<dyn ToolDyn>,
 ),
 ```
+
+#### 5. Tool display summary
+
+Chat UI shows core arg per tool call: `[web_search] Running.. "rust neovim"`.
+
+Add match arm in `src/tools/mod.rs` → `tool_display_summary()`:
+
+```rust
+"my_tool" => "filepath",   // arg that describes what's happening
+```
+
+No useful display arg → omit. Fallback: `[tool_name] Done!`.

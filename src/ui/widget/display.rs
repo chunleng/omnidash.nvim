@@ -24,7 +24,7 @@ use crate::{
         TenonUserTextMessage, chat_process_count,
     },
     get_application_config,
-    tools::resolve_tool_names,
+    tools::{resolve_tool_names, tool_display_summary},
     ui::{
         nvim_primitives::{buffer::NvimBuffer, window::NvimWindow},
         widget::Widget,
@@ -516,18 +516,19 @@ impl DisplayAsChat for TenonLog {
             TenonLog::Tool(TenonToolLog {
                 tool_call,
                 tool_result,
-            }) => (
-                vec![format!(
-                    "[{}] {}",
-                    tool_call.name,
-                    if tool_result.is_some() {
-                        "Done!"
-                    } else {
-                        "Running.."
-                    }
-                )],
-                SignIcon::Tool,
-            ),
+            }) => {
+                let status = if tool_result.is_some() {
+                    " "
+                } else {
+                    " "
+                };
+                let summary = tool_display_summary(&tool_call.name, &tool_call.args);
+                let line = match summary {
+                    Some(s) => format!("{} {} | {}", status, tool_call.name, s),
+                    None => format!("{} {}", status, tool_call.name),
+                };
+                (vec![line], SignIcon::Tool)
+            }
         }
     }
 }

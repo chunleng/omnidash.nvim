@@ -175,7 +175,7 @@ impl Tool for Run {
         ToolDefinition {
             name: "run".to_string(),
             description: format!(
-                "Execute a permitted command.\n\nAllowed: {}\n\nNo shell features (pipes, &&, redirects, $()). Use filter/limit/direction to reduce output instead of piping.",
+                "Execute a permitted command.\n\nAllowed: {}\n\nNo shell features (pipes, &&, redirects, $()). Use filter/limit/direction to reduce output instead of piping.\n\nOutput: stdout (filtered by limit) + all stderr.",
                 allowed_desc
             ),
             parameters: json!({

@@ -16,6 +16,13 @@ pub struct TenonUserConfig {
     pub agents: Option<HashMap<String, TenonAgentConfig>>,
     pub models: Option<Vec<ModelConfig>>,
     pub tools: Option<ToolsUserConfig>,
+    pub history: Option<HistoryUserConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryUserConfig {
+    pub directory: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -157,6 +164,10 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
             if let Some(run) = tools.run {
                 conf.tools.run.whitelist = run.whitelist;
             }
+        }
+
+        if let Some(history) = value.history {
+            conf.history.directory = history.directory;
         }
 
         Ok(conf)

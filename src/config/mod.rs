@@ -33,12 +33,26 @@ pub struct RunConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct HistoryConfig {
+    pub directory: String,
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        Self {
+            directory: ".tenon/history".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
     pub default_agent: String,
     pub models: Vec<SupportedModels>,
     pub tools: ToolsConfig,
+    pub history: HistoryConfig,
 }
 
 impl Default for TenonConfig {
@@ -87,6 +101,7 @@ impl Default for TenonConfig {
             default_agent: default_agent_name,
             models: vec![default_model],
             tools: ToolsConfig::default(),
+            history: HistoryConfig::default(),
         }
     }
 }

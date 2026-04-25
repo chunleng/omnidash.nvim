@@ -431,12 +431,14 @@ impl ChatProcess {
                                     *usage_lock = Some(usage);
                                 }
                             }
+                            let history_dir = get_application_config().history.directory;
                             save_to_history(
                                 &chat_id,
                                 &agent_clone.name,
                                 &agent_clone.inner.model.display_name(),
                                 &logs_clone,
                                 &usage_clone,
+                                &history_dir,
                             );
                         }
                         Ok(StreamItem::Other) => {}

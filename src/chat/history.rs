@@ -24,6 +24,7 @@ pub fn save_to_history(
     model_display: &str,
     logs: &Arc<RwLock<LinkedList<TenonLog>>>,
     usage: &Arc<RwLock<Option<Usage>>>,
+    history_directory: &str,
 ) {
     let logs_vec = logs
         .read()
@@ -41,7 +42,13 @@ pub fn save_to_history(
     };
 
     if let Ok(cwd) = std::env::current_dir() {
-        let dir = cwd.join(".tenon").join("history");
+        let dir = std::path::Path::new(history_directory);
+        // If path is relative, make it relative to cwd
+        let dir = if dir.is_relative() {
+            cwd.join(dir)
+        } else {
+            dir.to_path_buf()
+        };
         if std::fs::create_dir_all(&dir).is_ok() {
             let path = dir.join(format!("{}.json", id));
             if let Ok(json) = serde_json::to_string_pretty(&history) {

@@ -46,6 +46,21 @@ impl Default for HistoryConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct TitleConfig {
+    pub model: Option<SupportedModels>,
+    pub prompt: String,
+}
+
+impl Default for TitleConfig {
+    fn default() -> Self {
+        Self {
+            model: None,
+            prompt: "2-6 specific words. Unclear → random adjective + noun (e.g., 'Silent Storm'). Title only.".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct TenonConfig {
     pub connectors: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, TenonAgent>,
@@ -53,6 +68,7 @@ pub struct TenonConfig {
     pub models: Vec<SupportedModels>,
     pub tools: ToolsConfig,
     pub history: HistoryConfig,
+    pub title: TitleConfig,
 }
 
 impl Default for TenonConfig {
@@ -102,6 +118,7 @@ impl Default for TenonConfig {
             models: vec![default_model],
             tools: ToolsConfig::default(),
             history: HistoryConfig::default(),
+            title: TitleConfig::default(),
         }
     }
 }

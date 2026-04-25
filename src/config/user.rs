@@ -17,12 +17,20 @@ pub struct TenonUserConfig {
     pub models: Option<Vec<ModelConfig>>,
     pub tools: Option<ToolsUserConfig>,
     pub history: Option<HistoryUserConfig>,
+    pub title: Option<TitleUserConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HistoryUserConfig {
     pub directory: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TitleUserConfig {
+    pub model: Option<ModelConfig>,
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -168,6 +176,24 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
 
         if let Some(history) = value.history {
             conf.history.directory = history.directory;
+        }
+
+        if let Some(title) = value.title {
+            if let Some(model) = title.model {
+                let provider_config: &ProviderConfig = conf
+                    .connectors
+                    .get(&model.connector)
+                    .ok_or(nvim_oxi::Error::Deserialize(DeserializeError::Custom {
+                        msg: format!("unknown connector for title model: {}", model.connector),
+                    }))?;
+                conf.title.model = Some(SupportedModels {
+                    config: provider_config.to_owned(),
+                    model_name: model.name,
+                });
+            }
+            if let Some(prompt) = title.prompt {
+                conf.title.prompt = prompt;
+            }
         }
 
         Ok(conf)

@@ -12,6 +12,7 @@ use super::TenonLog;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatHistory {
     pub id: String,
+    pub title: Option<String>,
     pub agent_name: String,
     pub model_display: String,
     pub usage: Option<Usage>,
@@ -20,6 +21,7 @@ pub struct ChatHistory {
 
 pub fn save_to_history(
     id: &str,
+    title: Option<&str>,
     agent_name: &str,
     model_display: &str,
     logs: &Arc<RwLock<LinkedList<TenonLog>>>,
@@ -35,6 +37,7 @@ pub fn save_to_history(
 
     let history = ChatHistory {
         id: id.to_string(),
+        title: title.map(|s| s.to_string()),
         agent_name: agent_name.to_string(),
         model_display: model_display.to_string(),
         usage: usage_val,

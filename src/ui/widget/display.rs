@@ -171,6 +171,13 @@ impl ChatDisplay {
                     };
                     let agent_name = chat_process.active_agent.name.clone();
                     let model_display = chat_process.active_agent.inner.model.display_name();
+                    let chat_title = chat_process
+                        .title
+                        .read()
+                        .ok()
+                        .and_then(|t| t.clone())
+                        .map(|t| format!("{} ", t))
+                        .unwrap_or_default();
                     drop(chat_process);
                     drop(chat);
                     let added = tool_added_clone.load(Ordering::SeqCst);
@@ -196,8 +203,8 @@ impl ChatDisplay {
                         (false, false) => format!(" ({})", tool_suffix),
                     };
                     content.push(format!(
-                        "󰭹  {}, agent: {}{}",
-                        chat_index_display, agent_name, meta_suffix
+                        "󰭹 {}{}, agent: {}{}",
+                        chat_title, chat_index_display, agent_name, meta_suffix
                     ));
                     let spinner_buf_line = frozen_line_count + content.len() - 1;
 

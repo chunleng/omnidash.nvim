@@ -196,11 +196,14 @@ fn generate_chat_id() -> String {
 
 pub struct ChatProcess {
     pub id: String,
+    pub title: Arc<RwLock<Option<String>>>,
     pub logs: Arc<RwLock<LinkedList<TenonLog>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
     pub active_agent: ActiveAgent,
     cancel_token: Arc<AtomicBool>,
     active_thread: Option<std::thread::JoinHandle<()>>,
+    cancel_title_token: Arc<AtomicBool>,
+    title_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone)]
@@ -258,6 +261,7 @@ impl ChatProcess {
     pub fn with_agent_name(agent_name: String) -> OxiResult<Self> {
         Ok(Self {
             id: generate_chat_id(),
+            title: Arc::new(RwLock::new(None)),
             logs: Arc::new(RwLock::new(LinkedList::new())),
             usage: Arc::new(RwLock::new(None)),
             active_agent: ActiveAgent {
@@ -270,6 +274,8 @@ impl ChatProcess {
             },
             cancel_token: Arc::new(AtomicBool::new(false)),
             active_thread: None,
+            cancel_title_token: Arc::new(AtomicBool::new(false)),
+            title_thread: None,
         })
     }
 
@@ -277,8 +283,85 @@ impl ChatProcess {
         self.cancel_token.store(true, Ordering::SeqCst);
     }
 
+    pub fn cancel_title(&mut self) {
+        self.cancel_title_token.store(true, Ordering::SeqCst);
+    }
+
     pub fn is_processing(&self) -> bool {
-        if let Some(thread) = self.active_thread.as_ref() {
+        let main_thread_running = if let Some(thread) = self.active_thread.as_ref() {
+            !thread.is_finished()
+        } else {
+            false
+        };
+
+        let title_thread_running = if let Some(thread) = self.title_thread.as_ref() {
+            !thread.is_finished()
+        } else {
+            false
+        };
+
+        main_thread_running || title_thread_running
+    }
+
+    /// Generates a title for the chat if not already set.
+    /// Runs in a separate thread to avoid blocking the main chat stream.
+    pub fn generate_title(&mut self, first_message: String) {
+        if self.title.read().map(|t| t.is_some()).unwrap_or(false) {
+            return;
+        }
+
+        // Cancel previous title generation
+        self.cancel_title_token.store(true, Ordering::SeqCst);
+        self.cancel_title_token = Arc::new(AtomicBool::new(false));
+        let cancel_token = Arc::clone(&self.cancel_title_token);
+
+        let title_arc = Arc::clone(&self.title);
+        let config = get_application_config();
+
+        self.title_thread = Some(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                // Get title model or fall back to default agent's model
+                let model = config.title.model.clone().or_else(|| {
+                    config
+                        .agents
+                        .get(&config.default_agent)
+                        .map(|a| a.model.clone())
+                });
+
+                let model = match model {
+                    Some(m) => m,
+                    None => return,
+                };
+
+                let behavior = vec![BehaviorSource::Text {
+                    value: config.title.prompt.clone(),
+                }];
+
+                let agent = get_agent(model, behavior, vec![]);
+
+                match agent.chat(first_message).await {
+                    Ok(title) => {
+                        if cancel_token.load(Ordering::SeqCst) {
+                            return;
+                        }
+                        let trimmed = title.trim();
+                        if !trimmed.is_empty() {
+                            if let Ok(mut t) = title_arc.write() {
+                                *t = Some(trimmed.to_string());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[tenon] Failed to generate title: {}", e);
+                    }
+                }
+            });
+        }));
+    }
+
+    pub fn is_generating_title(&self) -> bool {
+        if let Some(thread) = self.title_thread.as_ref() {
             !thread.is_finished()
         } else {
             false
@@ -293,10 +376,15 @@ impl ChatProcess {
         self.cancel_token = Arc::new(AtomicBool::new(false));
         let cancel_token = Arc::clone(&self.cancel_token);
 
+        // Generate title if not already set
+        self.generate_title(message.clone());
+
         let logs_clone = Arc::clone(&self.logs);
         let usage_clone = Arc::clone(&self.usage);
         let agent_clone = self.active_agent.clone();
         let chat_id = self.id.clone();
+        let title_clone = Arc::clone(&self.title);
+
         self.active_thread = Some(std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
@@ -432,8 +520,10 @@ impl ChatProcess {
                                 }
                             }
                             let history_dir = get_application_config().history.directory;
+                            let title_val = title_clone.read().ok().and_then(|t| t.clone());
                             save_to_history(
                                 &chat_id,
+                                title_val.as_deref(),
                                 &agent_clone.name,
                                 &agent_clone.inner.model.display_name(),
                                 &logs_clone,

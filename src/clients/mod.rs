@@ -1,13 +1,26 @@
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+mod anthropic;
+mod bedrock;
+mod gemini;
+mod ollama;
+mod openai;
+
 use rig::{
     agent::Agent,
-    client::{CompletionClient, Nothing, ProviderClient},
     message::Message,
-    providers::{anthropic, gemini, ollama, openai},
+    providers::{
+        anthropic as rig_anthropic, gemini as rig_gemini, ollama as rig_ollama,
+        openai as rig_openai,
+    },
     streaming::StreamingChat,
     tool::ToolDyn,
 };
 use serde::Deserialize;
+
+pub use anthropic::{AnthropicProviderConfig, get_anthropic_agent};
+pub use bedrock::get_bedrock_agent;
+pub use gemini::{GeminiProviderConfig, get_gemini_agent};
+pub use ollama::{OllamaProviderConfig, get_ollama_agent};
+pub use openai::{OpenAIProviderConfig, get_openai_agent};
 
 /// Describes where a behavior comes from: an inline string or a file path.
 ///
@@ -65,6 +78,9 @@ impl SupportedModels {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct NoProviderConfig;
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
@@ -77,10 +93,10 @@ pub enum ProviderConfig {
 }
 
 pub enum ChatAgent {
-    Ollama(Agent<ollama::CompletionModel>),
-    Gemini(Agent<gemini::CompletionModel>),
-    OpenAI(Agent<openai::CompletionModel>),
-    Anthropic(Agent<anthropic::completion::CompletionModel>),
+    Ollama(Agent<rig_ollama::CompletionModel>),
+    Gemini(Agent<rig_gemini::CompletionModel>),
+    OpenAI(Agent<rig_openai::CompletionModel>),
+    Anthropic(Agent<rig_anthropic::completion::CompletionModel>),
     Bedrock(Agent<rig_bedrock::completion::CompletionModel>),
 }
 
@@ -89,7 +105,7 @@ pub enum ChatStream {
         futures::stream::BoxStream<
             'static,
             Result<
-                rig::agent::MultiTurnStreamItem<ollama::StreamingCompletionResponse>,
+                rig::agent::MultiTurnStreamItem<rig_ollama::StreamingCompletionResponse>,
                 rig::agent::StreamingError,
             >,
         >,
@@ -98,7 +114,7 @@ pub enum ChatStream {
         futures::stream::BoxStream<
             'static,
             Result<
-                rig::agent::MultiTurnStreamItem<gemini::streaming::StreamingCompletionResponse>,
+                rig::agent::MultiTurnStreamItem<rig_gemini::streaming::StreamingCompletionResponse>,
                 rig::agent::StreamingError,
             >,
         >,
@@ -107,7 +123,7 @@ pub enum ChatStream {
         futures::stream::BoxStream<
             'static,
             Result<
-                rig::agent::MultiTurnStreamItem<openai::streaming::StreamingCompletionResponse>,
+                rig::agent::MultiTurnStreamItem<rig_openai::streaming::StreamingCompletionResponse>,
                 rig::agent::StreamingError,
             >,
         >,
@@ -116,7 +132,9 @@ pub enum ChatStream {
         futures::stream::BoxStream<
             'static,
             Result<
-                rig::agent::MultiTurnStreamItem<anthropic::streaming::StreamingCompletionResponse>,
+                rig::agent::MultiTurnStreamItem<
+                    rig_anthropic::streaming::StreamingCompletionResponse,
+                >,
                 rig::agent::StreamingError,
             >,
         >,
@@ -327,203 +345,10 @@ pub fn get_agent(
             resolved_behavior,
             tools,
         )),
-        ProviderConfig::Bedrock(config) => ChatAgent::Bedrock(get_bedrock_agent(
-            config,
+        ProviderConfig::Bedrock(_config) => ChatAgent::Bedrock(get_bedrock_agent(
             model.model_name,
             resolved_behavior,
             tools,
         )),
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct OllamaProviderConfig {
-    pub base_url: String,
-    pub bearer: Option<String>,
-}
-
-impl Default for OllamaProviderConfig {
-    fn default() -> Self {
-        Self {
-            base_url: "http://127.0.0.1:11434".to_string(),
-            bearer: std::env::var("OLLAMA_API_KEY").ok(),
-        }
-    }
-}
-
-fn get_ollama_agent(
-    config: OllamaProviderConfig,
-    model_name: String,
-    preamble: Option<String>,
-    tools: Vec<Box<dyn ToolDyn>>,
-) -> Agent<ollama::CompletionModel> {
-    let mut headers = HeaderMap::new();
-    if let Some(bearer) = config.bearer {
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", bearer)).unwrap(),
-        );
-    }
-    let client = ollama::Client::builder()
-        .base_url(config.base_url)
-        .http_headers(headers)
-        .api_key(Nothing)
-        .build()
-        .unwrap();
-    let mut agent = client.agent(model_name);
-    if let Some(p) = preamble {
-        agent = agent.preamble(&p);
-    }
-    let agent = agent
-        .additional_params(serde_json::json!({ "think": true }))
-        .tools(tools)
-        .build();
-
-    agent
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct GeminiProviderConfig {
-    pub base_url: String,
-    pub api_key: String,
-}
-
-impl Default for GeminiProviderConfig {
-    fn default() -> Self {
-        Self {
-            base_url: "https://generativelanguage.googleapis.com".to_string(),
-            api_key: std::env::var("GEMINI_API_KEY").unwrap_or_default(),
-        }
-    }
-}
-
-fn get_gemini_agent(
-    config: GeminiProviderConfig,
-    model_name: String,
-    preamble: Option<String>,
-    tools: Vec<Box<dyn ToolDyn>>,
-) -> Agent<gemini::CompletionModel> {
-    let client = gemini::Client::builder()
-        .base_url(config.base_url)
-        .api_key(config.api_key)
-        .build()
-        .unwrap();
-    let mut agent = client.agent(model_name);
-    if let Some(p) = preamble {
-        agent = agent.preamble(&p);
-    }
-    let agent = agent.tools(tools).build();
-
-    agent
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct OpenAIProviderConfig {
-    pub base_url: String,
-    pub api_key: String,
-}
-
-impl Default for OpenAIProviderConfig {
-    fn default() -> Self {
-        Self {
-            base_url: "https://api.openai.com/v1".to_string(),
-            api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
-        }
-    }
-}
-
-fn get_openai_agent(
-    config: OpenAIProviderConfig,
-    model_name: String,
-    preamble: Option<String>,
-    tools: Vec<Box<dyn ToolDyn>>,
-) -> Agent<openai::CompletionModel> {
-    let client = openai::Client::builder()
-        .base_url(config.base_url)
-        .api_key(config.api_key)
-        .build()
-        .unwrap()
-        .completions_api();
-    let mut agent = client.agent(model_name.clone());
-    if let Some(p) = preamble {
-        agent = agent.preamble(&p);
-    }
-    // non-exhaustive for thinking model for now
-    if ["gpt-5.4", "o3", "o1"].contains(&model_name.as_str()) {
-        agent = agent.additional_params(serde_json::json!({
-            "reasoning_effort": "high"
-        }));
-    }
-    let agent = agent.tools(tools).build();
-
-    agent
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct AnthropicProviderConfig {
-    pub base_url: String,
-    pub api_key: String,
-}
-
-impl Default for AnthropicProviderConfig {
-    fn default() -> Self {
-        Self {
-            base_url: "https://api.anthropic.com".to_string(),
-            api_key: std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
-        }
-    }
-}
-
-fn get_anthropic_agent(
-    config: AnthropicProviderConfig,
-    model_name: String,
-    preamble: Option<String>,
-    tools: Vec<Box<dyn ToolDyn>>,
-) -> Agent<anthropic::completion::CompletionModel> {
-    let client = anthropic::Client::builder()
-        .base_url(config.base_url)
-        .api_key(config.api_key)
-        .build()
-        .unwrap();
-    let mut agent = client.agent(model_name);
-    if let Some(p) = preamble {
-        agent = agent.preamble(&p);
-    }
-    let agent = agent
-        .max_tokens(16000)
-        .additional_params(serde_json::json!({
-            "thinking": { "type": "enabled", "budget_tokens": 10000 }
-        }))
-        .tools(tools)
-        .build();
-
-    agent
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct NoProviderConfig;
-
-fn get_bedrock_agent(
-    _config: NoProviderConfig,
-    model_name: String,
-    preamble: Option<String>,
-    tools: Vec<Box<dyn ToolDyn>>,
-) -> Agent<rig_bedrock::completion::CompletionModel> {
-    // There's no config provider because bedrock is configured solely by env. Following are some
-    // environment that you can override to provide the necessary configuration to bedrock (apart
-    // from the standard env like AWS_REGION)
-    // - AWS_ENDPOINT_URL_BEDROCK_RUNTIME
-    // - AWS_BEARER_TOKEN_BEDROCK
-    let client = rig_bedrock::client::Client::from_env();
-    let mut agent = client.agent(model_name);
-    if let Some(p) = preamble {
-        agent = agent.preamble(&p);
-    }
-    let agent = agent.tools(tools).build();
-
-    agent
 }

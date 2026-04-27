@@ -279,6 +279,42 @@ impl ChatProcess {
         })
     }
 
+    pub fn from_history(history: history::ChatHistory) -> OxiResult<Self> {
+        let config = get_application_config();
+        let (agent_name, agent) = config
+            .agents
+            .get(&history.agent_name)
+            .map(|a| (history.agent_name.clone(), a.clone()))
+            .or_else(|| {
+                config
+                    .agents
+                    .get(&config.default_agent)
+                    .map(|a| (config.default_agent.clone(), a.clone()))
+            })
+            .ok_or_else(|| {
+                nvim_oxi::Error::Mlua(mlua::Error::RuntimeError(
+                    "no agent found in config".to_string(),
+                ))
+            })?;
+
+        let logs: LinkedList<TenonLog> = history.logs.into_iter().collect();
+
+        Ok(Self {
+            id: history.id,
+            title: Arc::new(RwLock::new(history.title)),
+            logs: Arc::new(RwLock::new(logs)),
+            usage: Arc::new(RwLock::new(history.usage)),
+            active_agent: ActiveAgent {
+                name: agent_name,
+                inner: agent,
+            },
+            cancel_token: Arc::new(AtomicBool::new(false)),
+            active_thread: None,
+            cancel_title_token: Arc::new(AtomicBool::new(false)),
+            title_thread: None,
+        })
+    }
+
     pub fn cancel(&mut self) {
         self.cancel_token.store(true, Ordering::SeqCst);
     }

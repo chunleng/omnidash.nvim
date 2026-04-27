@@ -22,7 +22,8 @@ use crate::{
     ui::widget::{BasicWidget, Widget},
 };
 use crate::{
-    chat::{ChatProcess, get_or_create_chat_process, remove_chat_process},
+    chat::history::ChatHistory,
+    chat::{CHAT_PROCESSES, ChatProcess, get_or_create_chat_process, remove_chat_process},
     ui::{
         nvim_primitives::{
             buffer::{NvimBuffer, NvimBufferOption, NvimKeymap},
@@ -323,6 +324,36 @@ impl ChatWindow {
         Ok(())
     }
 
+    /// Loads a chat from history. If a process with the same ID already exists,
+    /// switches to it; otherwise creates a new process from the history entry.
+    pub fn load_or_create_chat_from_history(&mut self, history: ChatHistory) -> OxiResult<()> {
+        // Check if a process with this ID already exists
+        let existing_idx = {
+            let processes = CHAT_PROCESSES.lock().unwrap();
+            processes.iter().enumerate().find_map(|(idx, process)| {
+                process
+                    .read()
+                    .ok()
+                    .filter(|proc| proc.id == history.id)
+                    .map(|_| idx)
+            })
+        };
+        if let Some(idx) = existing_idx {
+            return self.load_chat(idx);
+        }
+
+        // Create new process from history
+        let new_index = chat_process_count();
+        {
+            let mut processes = CHAT_PROCESSES.lock().unwrap();
+            let process = ChatProcess::from_history(history)?;
+            processes.push(Arc::new(RwLock::new(process)));
+        }
+        self.load_chat(new_index)?;
+        self.focus_input_window()?;
+        Ok(())
+    }
+
     /// Returns a stable key for a chat process, based on its Arc pointer address.
     /// This remains valid even when chat indices shift due to dismiss.
     fn chat_key(process: &Arc<RwLock<ChatProcess>>) -> String {
@@ -398,6 +429,12 @@ impl ChatWindow {
                     modes: vec![Mode::Normal],
                     lhs: "gt".to_string(),
                     rhs: "<cmd>lua require('tenon').keymap.select_tools()<cr>".to_string(),
+                    opts: SetKeymapOpts::default(),
+                },
+                NvimKeymap {
+                    modes: vec![Mode::Normal],
+                    lhs: "gh".to_string(),
+                    rhs: "<cmd>lua require('tenon').keymap.select_history()<cr>".to_string(),
                     opts: SetKeymapOpts::default(),
                 },
             ],
@@ -566,6 +603,12 @@ impl ChatWindow {
                         modes: vec![Mode::Normal],
                         lhs: "gt".to_string(),
                         rhs: "<cmd>lua require('tenon').keymap.select_tools()<cr>".to_string(),
+                        opts: SetKeymapOpts::default(),
+                    },
+                    NvimKeymap {
+                        modes: vec![Mode::Normal],
+                        lhs: "gh".to_string(),
+                        rhs: "<cmd>lua require('tenon').keymap.select_history()<cr>".to_string(),
                         opts: SetKeymapOpts::default(),
                     },
                 ],

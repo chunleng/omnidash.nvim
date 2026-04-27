@@ -60,3 +60,37 @@ pub fn save_to_history(
         }
     }
 }
+
+pub fn load_history_entries(history_directory: &str) -> Vec<ChatHistory> {
+    let mut entries = Vec::new();
+    let Ok(cwd) = std::env::current_dir() else {
+        return entries;
+    };
+    let dir = std::path::Path::new(history_directory);
+    let dir = if dir.is_relative() {
+        cwd.join(dir)
+    } else {
+        dir.to_path_buf()
+    };
+    let Ok(read_dir) = std::fs::read_dir(&dir) else {
+        return entries;
+    };
+
+    for entry in read_dir {
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if let Ok(history) = serde_json::from_str::<ChatHistory>(&contents) {
+            entries.push(history);
+        }
+    }
+
+    // Sort by id descending (newest first, since id starts with YYYY-MM-DD)
+    entries.sort_by(|a, b| b.id.cmp(&a.id));
+    entries
+}

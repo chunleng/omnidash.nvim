@@ -376,7 +376,10 @@ impl ChatProcess {
 
                 let agent = get_agent(model, behavior, vec![]);
 
-                match agent.chat(first_message).await {
+                match agent
+                    .chat(format!("Generate title:\n```\n{}\n```", first_message))
+                    .await
+                {
                     Ok(title) => {
                         if cancel_token.load(Ordering::SeqCst) {
                             return;
@@ -384,7 +387,14 @@ impl ChatProcess {
                         let trimmed = title.trim();
                         if !trimmed.is_empty() {
                             if let Ok(mut t) = title_arc.write() {
-                                *t = Some(trimmed.to_string());
+                                *t = Some(
+                                    trimmed
+                                        .lines()
+                                        .collect::<Vec<_>>()
+                                        .first()
+                                        .map(|x| x.to_string())
+                                        .unwrap_or("Untitled".to_string()),
+                                );
                             }
                         }
                     }

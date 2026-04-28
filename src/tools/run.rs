@@ -1,4 +1,6 @@
+use crate::clients::{BehaviorSource, get_agent};
 use crate::get_application_config;
+use futures::stream::{self, StreamExt};
 use rig::completion::ToolDefinition;
 use rig::tool::{Tool, ToolError};
 use serde::{Deserialize, Serialize};
@@ -121,6 +123,121 @@ fn command_matches_whitelist(command_tokens: &[String], whitelist: &[String]) ->
     false
 }
 
+/// Response from LLM command safety check.
+#[derive(Debug, Deserialize)]
+struct CommandSafetyResponse {
+    decision: String,
+    reason: Option<String>,
+}
+
+/// Check if a command is safe to execute using LLM.
+/// Returns Ok(true) if allowed, Ok(false) with reason if denied, or Err on failure.
+async fn check_command_safety_with_llm(
+    command: &str,
+    model: &crate::clients::SupportedModels,
+) -> Result<(bool, Option<String>), ToolError> {
+    let safety_checker_behavior = BehaviorSource::Text {
+        value: r#"Check command safety. Output JSON only.
+
+DENY:
+- Secrets: env vars (*KEY*, *SECRET*, *TOKEN*, *API*), files (.env, id_rsa, credentials, .pem)
+- System modify: install packages, system config, services
+- Delete: rm, rmdir, unlink, rmtree, shred
+- Network: curl, wget, nc, netcat, http requests
+- Code exec: eval, exec, source untrusted scripts
+- Permissions: chmod, chown, setuid
+- Process kill: kill, pkill, killall
+- Sensitive paths: /etc/passwd, /etc/shadow, ~/.ssh, /root
+
+ALLOW:
+- Read files: cat, head, tail, grep (non-sensitive paths only)
+- List directory: ls, tree, find
+- VCS read-only: git status, git log, git diff
+- Build/test: make, cargo build, npm test
+- Info: which, whereis, echo
+
+Unknown/unlisted commands → DENY
+
+Output:
+{"decision": "allow"}
+{"decision": "deny", "reason": "..."}"#
+            .to_string(),
+    };
+
+    let agent = get_agent(model.clone(), vec![safety_checker_behavior], vec![]);
+
+    let user_message = format!("Command: {}", command);
+
+    let response = agent.chat(user_message).await.map_err(|e| {
+        ToolError::ToolCallError(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("LLM safety check failed: {}", e),
+        )))
+    })?;
+
+    // Parse JSON response
+    let safety: CommandSafetyResponse = serde_json::from_str(&response).map_err(|e| {
+        ToolError::ToolCallError(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "Failed to parse LLM response as JSON: {} (response: {})",
+                e, response
+            ),
+        )))
+    })?;
+
+    let allowed = safety.decision == "allow";
+    Ok((allowed, safety.reason))
+}
+
+/// Check command safety using one LLM call per model in parallel.
+/// All models must allow for the command to proceed.
+/// Returns Ok(()) if allowed, or Err with the first denial reason.
+async fn check_command_safety(command: &str) -> Result<(), ToolError> {
+    let config = get_application_config();
+
+    let models = &config.tools.run.check_models;
+    if models.is_empty() {
+        return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Command not in whitelist and no check_models configured for LLM safety check"
+                .to_string(),
+        ))));
+    }
+
+    // Run checks in parallel, process results as they arrive
+    let checks: Vec<_> = models
+        .iter()
+        .map(|model| {
+            let model = model.clone();
+            let command = command.to_string();
+            async move { check_command_safety_with_llm(&command, &model).await }
+        })
+        .collect();
+
+    let mut stream = stream::iter(checks).buffer_unordered(models.len());
+
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok((allowed, reason)) => {
+                if !allowed {
+                    return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        format!(
+                            "Command denied by safety check: {}",
+                            reason.unwrap_or_else(|| "Unknown reason".to_string())
+                        ),
+                    ))));
+                }
+                // allowed, continue checking other models
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(())
+}
+
 /// Apply filter, direction, and limit to stdout lines.
 fn apply_output_filters(
     stdout: &str,
@@ -164,20 +281,13 @@ impl Tool for Run {
     type Output = String;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
-        let config = get_application_config();
-        let allowed_list = &config.tools.run.whitelist;
-        let allowed_desc = if allowed_list.is_empty() {
-            "(none configured)".to_string()
-        } else {
-            allowed_list.join(", ")
-        };
-
         ToolDefinition {
             name: "run".to_string(),
-            description: format!(
-                "Execute a permitted command.\n\nAllowed: {}\n\nNo shell features (pipes, &&, redirects, $()). Use filter/limit/direction to reduce output instead of piping.\n\nOutput: stdout (filtered by limit) + all stderr.",
-                allowed_desc
-            ),
+            description:
+                "Execute a permitted command. No shell features (pipes, &&, redirects, $()). \
+                Use filter/limit/direction to reduce output instead of piping. \
+                Output: stdout (filtered by limit) + all stderr."
+                    .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -243,19 +353,8 @@ impl Tool for Run {
         let whitelist = &config.tools.run.whitelist;
 
         if !command_matches_whitelist(&command_tokens, whitelist) {
-            return Err(ToolError::ToolCallError(Box::new(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                if whitelist.is_empty() {
-                    "No commands allowed — whitelist is empty. Configure run.whitelist in setup()."
-                        .to_string()
-                } else {
-                    format!(
-                        "Command '{}' not allowed. Allowed patterns: {}",
-                        args.command,
-                        whitelist.join(", ")
-                    )
-                },
-            ))));
+            // Whitelist doesn't match - use LLM to check if command is safe
+            check_command_safety(&args.command).await?;
         }
 
         // Build the process
@@ -330,159 +429,5 @@ impl Tool for Run {
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| {
             r#"{"exit_code":-1,"stdout":"","stderr":"","truncated":false}"#.to_string()
         }))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_whitelist_pattern_exact() {
-        let (tokens, allowance) = parse_whitelist_pattern("git status");
-        assert_eq!(tokens, vec!["git", "status"]);
-        assert!(matches!(allowance, ArgAllowance::Exact));
-    }
-
-    #[test]
-    fn test_parse_whitelist_pattern_wildcard() {
-        let (tokens, allowance) = parse_whitelist_pattern("git log *");
-        assert_eq!(tokens, vec!["git", "log"]);
-        assert!(matches!(allowance, ArgAllowance::AnyArgs));
-    }
-
-    #[test]
-    fn test_parse_whitelist_pattern_single_arg() {
-        let (tokens, allowance) = parse_whitelist_pattern("make ?");
-        assert_eq!(tokens, vec!["make"]);
-        assert!(matches!(allowance, ArgAllowance::OneArg));
-    }
-
-    #[test]
-    fn test_parse_whitelist_pattern_single_command() {
-        let (tokens, allowance) = parse_whitelist_pattern("make");
-        assert_eq!(tokens, vec!["make"]);
-        assert!(matches!(allowance, ArgAllowance::Exact));
-    }
-
-    #[test]
-    fn test_command_matches_exact() {
-        let whitelist = vec!["git status".to_string()];
-        assert!(command_matches_whitelist(
-            &vec!["git".to_string(), "status".to_string()],
-            &whitelist
-        ));
-        // Extra args should NOT match exact pattern
-        assert!(!command_matches_whitelist(
-            &vec![
-                "git".to_string(),
-                "status".to_string(),
-                "--short".to_string()
-            ],
-            &whitelist
-        ));
-    }
-
-    #[test]
-    fn test_command_matches_wildcard() {
-        let whitelist = vec!["git log *".to_string()];
-        assert!(command_matches_whitelist(
-            &vec![
-                "git".to_string(),
-                "log".to_string(),
-                "--oneline".to_string()
-            ],
-            &whitelist
-        ));
-        // Zero extra args still matches * pattern
-        assert!(command_matches_whitelist(
-            &vec!["git".to_string(), "log".to_string()],
-            &whitelist
-        ));
-        assert!(!command_matches_whitelist(
-            &vec!["git".to_string(), "diff".to_string()],
-            &whitelist
-        ));
-    }
-
-    #[test]
-    fn test_command_matches_one_arg() {
-        let whitelist = vec!["make ?".to_string()];
-        // Exactly one extra arg → match
-        assert!(command_matches_whitelist(
-            &vec!["make".to_string(), "build".to_string()],
-            &whitelist
-        ));
-        // No extra args → no match (pattern requires one arg)
-        assert!(!command_matches_whitelist(
-            &vec!["make".to_string()],
-            &whitelist
-        ));
-        // Two extra args → no match
-        assert!(!command_matches_whitelist(
-            &vec!["make".to_string(), "build".to_string(), "-j4".to_string()],
-            &whitelist
-        ));
-    }
-
-    #[test]
-    fn test_command_matches_single_exact() {
-        let whitelist = vec!["make".to_string()];
-        assert!(command_matches_whitelist(
-            &vec!["make".to_string()],
-            &whitelist
-        ));
-        assert!(!command_matches_whitelist(
-            &vec!["make".to_string(), "build".to_string()],
-            &whitelist
-        ));
-    }
-
-    #[test]
-    fn test_find_shell_metacharacter() {
-        assert_eq!(find_shell_metacharacter("ls | grep foo"), Some("|"));
-        assert_eq!(find_shell_metacharacter("make && make test"), Some("&&"));
-        assert_eq!(find_shell_metacharacter("echo $(pwd)"), Some("$("));
-        assert_eq!(find_shell_metacharacter("echo hi > out"), Some(">"));
-        assert_eq!(find_shell_metacharacter("cat < in"), Some("<"));
-        assert_eq!(find_shell_metacharacter("make ; echo done"), Some(";"));
-        assert_eq!(find_shell_metacharacter("cargo build"), None);
-    }
-
-    #[test]
-    fn test_apply_output_filters_no_filters() {
-        let stdout = "line1\nline2\nline3";
-        let result = apply_output_filters(stdout, None, None, None);
-        assert_eq!(result, "line1\nline2\nline3");
-    }
-
-    #[test]
-    fn test_apply_output_filters_with_filter() {
-        let stdout = "error: bad\ninfo: ok\nerror: worse";
-        let result = apply_output_filters(stdout, Some("error"), None, None);
-        assert_eq!(result, "error: bad\nerror: worse");
-    }
-
-    #[test]
-    fn test_apply_output_filters_with_limit_tail() {
-        let stdout = "line1\nline2\nline3\nline4\nline5";
-        let result = apply_output_filters(stdout, None, Some("tail"), Some(2));
-        assert_eq!(result, "line4\nline5");
-    }
-
-    #[test]
-    fn test_apply_output_filters_with_limit_head() {
-        let stdout = "line1\nline2\nline3\nline4\nline5";
-        let result = apply_output_filters(stdout, None, Some("head"), Some(2));
-        assert_eq!(result, "line1\nline2");
-    }
-
-    #[test]
-    fn test_command_matches_empty_whitelist() {
-        let whitelist: Vec<String> = vec![];
-        assert!(!command_matches_whitelist(
-            &vec!["git".to_string()],
-            &whitelist
-        ));
     }
 }

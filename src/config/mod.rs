@@ -32,6 +32,7 @@ pub struct FetchWebpageConfig {
 #[derive(Debug, Clone, Default)]
 pub struct RunConfig {
     pub whitelist: Vec<String>,
+    pub check_models: Vec<SupportedModels>,
 }
 
 #[derive(Debug, Clone)]

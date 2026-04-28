@@ -44,6 +44,9 @@ pub struct ToolsUserConfig {
 #[serde(deny_unknown_fields)]
 pub struct RunUserConfig {
     pub whitelist: Vec<String>,
+
+    #[serde(default)]
+    pub check_models: Vec<ModelConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -171,6 +174,25 @@ impl TryFrom<TenonUserConfig> for TenonConfig {
             }
             if let Some(run) = tools.run {
                 conf.tools.run.whitelist = run.whitelist;
+                conf.tools.run.check_models = run
+                    .check_models
+                    .into_iter()
+                    .map(|m| -> Result<_, nvim_oxi::Error> {
+                        let provider_config: &ProviderConfig = conf
+                            .connectors
+                            .get(&m.connector)
+                            .ok_or(nvim_oxi::Error::Deserialize(DeserializeError::Custom {
+                                msg: format!(
+                                    "unknown connector for run check model: {}",
+                                    m.connector
+                                ),
+                            }))?;
+                        Ok(SupportedModels {
+                            config: provider_config.to_owned(),
+                            model_name: m.name,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
             }
         }
 

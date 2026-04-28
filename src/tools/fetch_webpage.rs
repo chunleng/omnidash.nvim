@@ -24,7 +24,7 @@ impl Tool for FetchWebpage {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "fetch_webpage".to_string(),
-            description: "Fetch webpage → readable text. With prompt: answer based on content. Without prompt: full markdown.".to_string(),
+            description: "Fetch webpage → readable text. Prefer prompt param → reduces tokens. With prompt: answer based on content. Without prompt: full markdown.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -34,7 +34,7 @@ impl Tool for FetchWebpage {
                     },
                     "prompt": {
                         "type": "string",
-                        "description": "What to extract/answer. Returns only the answer. Scalar: fact/yes-no. Structured: table/steps/kvpairs. Compressed: summary/takeaways/translation. Filtered: return portion of document."
+                        "description": "RECOMMENDED → reduces output tokens. What to extract/answer. Returns only the answer. Scalar: fact/yes-no. Structured: table/steps/kvpairs. Compressed: summary/takeaways/translation. Filtered: return portion of document."
                     }
                 },
                 "required": ["url"]
@@ -116,7 +116,7 @@ async fn answer_with_prompt(markdown: &str, prompt: &str) -> Result<String, Tool
     let response = agent.chat(user_message).await.map_err(|e| {
         ToolError::ToolCallError(Box::new(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("Extraction agent failed: {}", e),
+            format!("Agent fail to run prompt: {}", e),
         )))
     })?;
 

@@ -66,7 +66,6 @@ impl ChatWindow {
             && let Some(win) = input_win.window.get_window()
         {
             api::set_current_win(&win)?;
-            api::feedkeys(c"a", c"n", false);
         }
         Ok(())
     }

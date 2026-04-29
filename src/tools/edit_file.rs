@@ -178,7 +178,7 @@ impl Tool for EditFile {
         let _ = GLOBAL_EXECUTION_HANDLER.execute_on_main_thread("vim.cmd('checktime')");
 
         Ok(json!({
-            "edits": edits,
+            "successful_edits": edits,
             "count": edits.len(),
         })
         .to_string())

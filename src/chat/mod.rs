@@ -92,7 +92,7 @@ pub struct TenonAgent {
 }
 
 const SYSTEM_BEHAVIOR: &str = "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
-    User may edit files between steps → files change silently. File state ≠ before? → user likely edited. Think why. \
+    User may edit files between steps → files change silently. File ≠ expected → user edited → re-read → preserve changes. \
     Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours.";
 
 impl TenonAgent {

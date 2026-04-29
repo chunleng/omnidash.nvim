@@ -137,9 +137,9 @@ async fn check_command_safety_with_llm(
     model: &crate::clients::SupportedModels,
 ) -> Result<(bool, Option<String>), ToolError> {
     let safety_checker_behavior = BehaviorSource::Text {
-        value: r#"Check command safety. Output JSON only.
+        value: r#"Judge command safety. Output JSON only.
 
-DENY:
+DENY patterns:
 - Secrets: env vars (*KEY*, *SECRET*, *TOKEN*, *API*), files (.env, id_rsa, credentials, .pem)
 - System modify: install packages, system config, services
 - Delete: rm, rmdir, unlink, rmtree, shred
@@ -149,14 +149,14 @@ DENY:
 - Process kill: kill, pkill, killall
 - Sensitive paths: /etc/passwd, /etc/shadow, ~/.ssh, /root
 
-ALLOW:
+ALLOW patterns:
 - Read files: cat, head, tail, grep (non-sensitive paths only)
 - List directory: ls, tree, find
 - VCS read-only: git status, git log, git diff
 - Build/test: make, cargo build, npm test
 - Info: which, whereis, echo
 
-Unknown/unlisted commands → DENY
+Judge by similarity to patterns above. Commands matching DENY patterns → deny. Commands matching ALLOW patterns → allow. Similar safe read-only operations → allow.
 
 Output:
 {"decision": "allow"}

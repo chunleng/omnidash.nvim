@@ -99,7 +99,7 @@ impl Tool for McpHubCaller {
     type Output = String;
 
     fn name(&self) -> String {
-        format!("{}.{}", self.server_name, self.tool_name)
+        format!("{}____{}", self.server_name, self.tool_name)
     }
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {

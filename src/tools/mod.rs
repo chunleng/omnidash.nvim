@@ -92,10 +92,12 @@ pub fn all_tool_names() -> Vec<String> {
 ///   MCP tools (e.g. `"server"` matches `"server.tool_a"`).
 pub fn tool_matches_selectors(name: &str, selectors: &[&str]) -> bool {
     selectors.iter().any(|&r| {
-        if r.contains('.') {
+        // TODO refactor to have a constant for the separator
+        // Remove the use of . or : because GPT doesn't allow `:` and Bedrock doesn't allow `.`
+        if r.contains("____") {
             r == name
         } else {
-            r == name || name.starts_with(&format!("{}.", r))
+            r == name || name.starts_with(&format!("{}____", r))
         }
     })
 }

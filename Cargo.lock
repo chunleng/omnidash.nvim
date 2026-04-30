@@ -2241,9 +2241,9 @@ dependencies = [
 
 [[package]]
 name = "rig-bedrock"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "839951e781de296a5c477c4c00e951ad4063145f9afb32a89c98da3dab4ea4a1"
+checksum = "08b42d73a3610e77e41bfbdea3fd6ae3974927b09aab6d5a24350d6a9dfb221b"
 dependencies = [
  "async-stream",
  "aws-config",
@@ -2263,9 +2263,9 @@ dependencies = [
 
 [[package]]
 name = "rig-core"
-version = "0.35.0"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31caace97ed9646cfb713f32f8321c9fe5dc6ee4390ff5041b565163bf900dc"
+checksum = "9ac7d75266ac1f79b1faeff611c85cb40be00a0a983db10036591424f0433dc1"
 dependencies = [
  "as-any",
  "async-stream",
@@ -2296,9 +2296,9 @@ dependencies = [
 
 [[package]]
 name = "rig-derive"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7590f1ffc5cef2af569072500c3ee02836c6cfb9faee9b6f0fc140428a50891"
+checksum = "dc1a6de0e69cfc929772efa85c19602a341b5837aba5eafe8339ccb26f185116"
 dependencies = [
  "convert_case",
  "deluxe",
@@ -2340,9 +2340,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.37"
+version = "0.23.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "758025cb5fccfd3bc2fd74708fd4682be41d99e5dff73c377c0646c6012c73a4"
+checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "aws-lc-rs",
  "once_cell",

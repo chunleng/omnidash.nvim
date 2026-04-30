@@ -16,9 +16,26 @@ pub fn get_bedrock_agent(
     // - AWS_BEARER_TOKEN_BEDROCK
     let client = rig_bedrock::client::Client::from_env()
         .expect("Failed to create Bedrock client from environment");
-    let mut agent = client.agent(model_name);
+    let mut agent = client.agent(model_name.clone());
     if let Some(p) = preamble {
         agent = agent.preamble(&p);
+    }
+    if model_name.contains("anthropic.claude") {
+        agent = agent.max_tokens(16000);
+        // https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html
+        match model_name {
+            x if x.contains("opus-4-5")
+                || x.contains("sonnet-4-5")
+                || x.contains("haiku-4-5")
+                || x.contains("opus-4-6")
+                || x.contains("sonnet-4-6") =>
+            {
+                agent = agent.additional_params(serde_json::json!({
+                    "thinking": { "type": "enabled", "budget_tokens": 10000 }
+                }));
+            }
+            _ => {}
+        }
     }
     let agent = agent.tools(tools).build();
 

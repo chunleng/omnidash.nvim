@@ -21,8 +21,8 @@ pub mod history;
 pub mod log;
 
 pub use log::{
-    TenonAssistantMessage, TenonAssistantMessageContent, TenonLog, TenonToolCall, TenonToolError,
-    TenonToolLog, TenonToolResult, TenonUserMessage, TenonUserTextMessage,
+    TenonAssistantMessage, TenonAssistantMessageContent, TenonLog, TenonLogData, TenonToolCall,
+    TenonToolError, TenonToolLog, TenonToolResult, TenonUserMessage, TenonUserTextMessage,
 };
 
 use history::save_to_history;
@@ -317,7 +317,14 @@ impl ChatSession {
 
                     let trailing_start = logs_vec
                         .iter()
-                        .rposition(|log| !matches!(log, TenonLog::Tool(_)))
+                        .rposition(|log| {
+                            !matches!(
+                                log,
+                                TenonLog {
+                                    data: TenonLogData::Tool(_)
+                                }
+                            )
+                        })
                         .map(|i| i + 1)
                         .unwrap_or(0);
 
@@ -325,7 +332,10 @@ impl ChatSession {
                         .iter()
                         .cloned()
                         .filter(|log| {
-                            if let TenonLog::Tool(tool_log) = log {
+                            if let TenonLog {
+                                data: TenonLogData::Tool(tool_log),
+                            } = log
+                            {
                                 tool_log.tool_result.is_some()
                             } else {
                                 true
@@ -355,9 +365,9 @@ impl ChatSession {
                 }
 
                 if let Ok(mut logs) = logs_clone.write() {
-                    logs.push_back(TenonLog::User(TenonUserMessage::Text(
+                    logs.push_back(TenonLog::new(TenonLogData::User(TenonUserMessage::Text(
                         TenonUserTextMessage(message.clone()),
-                    )))
+                    ))))
                 }
 
                 let mut stream = agent.stream_chat(message, chat_history).await;
@@ -372,9 +382,9 @@ impl ChatSession {
                         }) => {
                             if let Ok(mut logs) = logs_clone.write() {
                                 if let Some(log) = logs.iter_mut().find_map(|x| match x {
-                                    TenonLog::Tool(tool)
-                                        if tool.tool_call.internal_call_id == internal_call_id =>
-                                    {
+                                    TenonLog {
+                                        data: TenonLogData::Tool(tool),
+                                    } if tool.tool_call.internal_call_id == internal_call_id => {
                                         Some(tool)
                                     }
                                     _ => None,
@@ -399,10 +409,13 @@ impl ChatSession {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
                                 if let Some(log) = logs.back_mut()
-                                    && let TenonLog::Assistant(TenonAssistantMessage {
-                                        reasoning: text,
-                                        ..
-                                    }) = log
+                                    && let TenonLog {
+                                        data:
+                                            TenonLogData::Assistant(TenonAssistantMessage {
+                                                reasoning: text,
+                                                ..
+                                            }),
+                                    } = log
                                 {
                                     match text {
                                         Some(x) => {
@@ -414,10 +427,12 @@ impl ChatSession {
                                 }
 
                                 if !updated {
-                                    logs.push_back(TenonLog::Assistant(TenonAssistantMessage {
-                                        reasoning: Some(reasoning),
-                                        content: vec![],
-                                    }));
+                                    logs.push_back(TenonLog::new(TenonLogData::Assistant(
+                                        TenonAssistantMessage {
+                                            reasoning: Some(reasoning),
+                                            content: vec![],
+                                        },
+                                    )));
                                 }
                             }
                         }
@@ -425,10 +440,13 @@ impl ChatSession {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
                                 if let Some(log) = logs.back_mut()
-                                    && let TenonLog::Assistant(TenonAssistantMessage {
-                                        content,
-                                        ..
-                                    }) = log
+                                    && let TenonLog {
+                                        data:
+                                            TenonLogData::Assistant(TenonAssistantMessage {
+                                                content,
+                                                ..
+                                            }),
+                                    } = log
                                 {
                                     if let Some(TenonAssistantMessageContent::Text(s)) =
                                         content.last_mut()
@@ -443,10 +461,12 @@ impl ChatSession {
                                 }
 
                                 if !updated {
-                                    logs.push_back(TenonLog::Assistant(TenonAssistantMessage {
-                                        reasoning: None,
-                                        content: vec![TenonAssistantMessageContent::Text(text)],
-                                    }));
+                                    logs.push_back(TenonLog::new(TenonLogData::Assistant(
+                                        TenonAssistantMessage {
+                                            reasoning: None,
+                                            content: vec![TenonAssistantMessageContent::Text(text)],
+                                        },
+                                    )));
                                 }
                             }
                         }
@@ -455,7 +475,7 @@ impl ChatSession {
                             internal_call_id,
                         }) => {
                             if let Ok(mut logs) = logs_clone.write() {
-                                logs.push_back(TenonLog::Tool(TenonToolLog {
+                                logs.push_back(TenonLog::new(TenonLogData::Tool(TenonToolLog {
                                     tool_call: TenonToolCall {
                                         id: tool_call.id,
                                         internal_call_id: internal_call_id,
@@ -463,7 +483,7 @@ impl ChatSession {
                                         args: tool_call.function.arguments,
                                     },
                                     tool_result: None,
-                                }));
+                                })));
                             }
                         }
                         Ok(StreamItem::Final { token_usage }) => {

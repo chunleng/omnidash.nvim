@@ -20,8 +20,8 @@ use nvim_oxi::{
 
 use crate::{
     chat::{
-        ChatSession, TenonAssistantMessageContent, TenonLog, TenonToolLog, TenonUserMessage,
-        TenonUserTextMessage, chat_session_count,
+        ChatSession, TenonAssistantMessageContent, TenonLog, TenonLogData, TenonToolLog,
+        TenonUserMessage, TenonUserTextMessage, chat_session_count,
     },
     get_application_config,
     tools::{resolve_tool_names, tool_display_summary},
@@ -484,11 +484,11 @@ trait DisplayAsChat {
 
 impl DisplayAsChat for TenonLog {
     fn as_chat_lines_with_sign(&self, is_processing: bool) -> (Vec<String>, SignIcon) {
-        match self {
-            TenonLog::User(TenonUserMessage::Text(TenonUserTextMessage(msg))) => {
+        match &self.data {
+            TenonLogData::User(TenonUserMessage::Text(TenonUserTextMessage(msg))) => {
                 (msg.lines().map(|x| x.to_string()).collect(), SignIcon::User)
             }
-            TenonLog::Assistant(msg) => {
+            TenonLogData::Assistant(msg) => {
                 if msg.content.is_empty() {
                     let display_last_x = if is_processing { 3 } else { 1 };
                     let reasoning_text = msg.reasoning.clone().unwrap_or("[thoughts]".to_string());
@@ -520,7 +520,7 @@ impl DisplayAsChat for TenonLog {
                     )
                 }
             }
-            TenonLog::Tool(TenonToolLog {
+            TenonLogData::Tool(TenonToolLog {
                 tool_call,
                 tool_result,
             }) => {

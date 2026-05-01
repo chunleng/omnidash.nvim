@@ -122,23 +122,35 @@ impl From<TenonToolLog> for Vec<Message> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TenonLog {
+pub enum TenonLogData {
     User(TenonUserMessage),
     Assistant(TenonAssistantMessage),
     Tool(TenonToolLog),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenonLog {
+    #[serde(flatten)]
+    pub data: TenonLogData,
+}
+
+impl TenonLog {
+    pub fn new(data: TenonLogData) -> Self {
+        Self { data }
+    }
+}
+
 impl From<TenonLog> for Vec<Message> {
     fn from(value: TenonLog) -> Self {
-        match value {
-            TenonLog::User(user_message) => vec![user_message.into()],
-            TenonLog::Assistant(assistant_message) => {
+        match value.data {
+            TenonLogData::User(user_message) => vec![user_message.into()],
+            TenonLogData::Assistant(assistant_message) => {
                 match Option::<Message>::from(assistant_message) {
                     Some(x) => vec![x.into()],
                     None => vec![],
                 }
             }
-            TenonLog::Tool(tool_log) => tool_log.into(),
+            TenonLogData::Tool(tool_log) => tool_log.into(),
         }
     }
 }

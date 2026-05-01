@@ -9,7 +9,6 @@ use nvim_oxi::{Result as OxiResult, api::types::LogLevel};
 use rig::{
     completion::Usage,
     message::{Message, ToolResultContent},
-    tool::ToolDyn,
 };
 use std::{
     collections::LinkedList,
@@ -105,11 +104,8 @@ impl TenonAgent {
         }
     }
 
-    pub fn build_chat_adapter(
-        &self,
-        tools: Vec<Box<dyn ToolDyn>>,
-        session_datetime: DateTime<Local>,
-    ) -> ChatAgent {
+    pub fn build_chat_adapter(&self, session_datetime: DateTime<Local>) -> ChatAgent {
+        // NOTE: Update token estimation when this prompt changes
         let system_with_datetime = format!(
             "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
             User may edit files between steps → files change silently. File ≠ expected → user edited → re-read → preserve changes. \
@@ -121,7 +117,17 @@ impl TenonAgent {
             value: system_with_datetime,
         }];
         combined.extend(self.behavior.iter().cloned());
-        get_agent(self.model.clone(), combined, tools)
+        get_agent(
+            self.model.clone(),
+            combined,
+            resolve_tools(&self.tool_names),
+        )
+    }
+
+    pub fn token_count(&self) -> usize {
+        // TODO: make tool estimate count with actual definition
+        // NOTE: 84 is from skimtoken estimation of system prompt
+        self.tool_names.len() * 150 + 84
     }
 }
 
@@ -299,7 +305,8 @@ impl ChatSession {
     /// Returns the total token count from all logs in this session.
     pub fn total_token_count(&self) -> usize {
         if let Ok(logs) = self.logs.read() {
-            logs.iter().map(|log| log.token_count()).sum()
+            logs.iter().map(|log| log.token_count()).sum::<usize>()
+                + self.active_agent.token_count()
         } else {
             0
         }
@@ -357,8 +364,8 @@ impl ChatSession {
                     }
                 }
 
-                let tools = resolve_tools(&agent_clone.tool_names);
-                let agent = agent_clone.build_chat_adapter(tools, session_datetime);
+                // let tools = resolve_tools(&agent_clone.tool_names);
+                let agent = agent_clone.build_chat_adapter(session_datetime);
                 let chat_history;
                 if let Ok(logs) = logs_clone.read() {
                     chat_history = logs

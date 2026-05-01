@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::Path;
 
-const LINE_TRUNCATION_LIMIT: usize = 10 * 1024;
+const LINE_TRUNCATION_LIMIT: usize = 300;
+const MATCH_LIMIT: usize = 100;
 
 #[derive(Deserialize)]
 pub struct SearchTextArgs {
@@ -37,6 +38,7 @@ struct MatchEntry {
 #[derive(Serialize)]
 struct FileEntry {
     path: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     matches: Vec<MatchEntry>,
 }
 
@@ -305,6 +307,14 @@ impl Tool for SearchText {
 
         // Sort by file path for deterministic order
         file_results.sort_by(|a, b| a.path.cmp(&b.path));
+
+        // If total matches across all files exceeds limit, only show file paths
+        let total_file_matches: usize = file_results.iter().map(|f| f.matches.len()).sum();
+        if total_file_matches > MATCH_LIMIT {
+            for entry in &mut file_results {
+                entry.matches.clear();
+            }
+        }
 
         let files_with_matches = file_results.len();
         let truncated_files = if let Some(max) = max_files {

@@ -129,8 +129,13 @@ pub enum TenonLogData {
     Tool(TenonToolLog),
 }
 
+fn zero() -> usize {
+    0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenonLog {
+    #[serde(default = "zero")]
     token_count: usize,
     #[serde(flatten)]
     data: TenonLogData,
@@ -191,6 +196,17 @@ impl TenonLog {
             }
             _ => false,
         }
+    }
+
+    /// Recalculates and updates the token count.
+    /// Useful for backward compatibility when loading history with missing token_count.
+    pub fn recount_tokens(&mut self) {
+        self.token_count = self.data.count_tokens();
+    }
+
+    /// Returns the token count for this log entry.
+    pub fn token_count(&self) -> usize {
+        self.token_count
     }
 }
 

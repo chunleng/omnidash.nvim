@@ -171,7 +171,14 @@ impl ChatSession {
                 ))
             })?;
 
-        let logs: LinkedList<TenonLog> = history.logs.into_iter().collect();
+        let logs: LinkedList<TenonLog> = history
+            .logs
+            .into_iter()
+            .map(|mut log| {
+                log.recount_tokens();
+                log
+            })
+            .collect();
 
         Ok(Self {
             id: history.id,

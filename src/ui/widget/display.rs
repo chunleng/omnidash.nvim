@@ -484,7 +484,7 @@ trait DisplayAsChat {
 
 impl DisplayAsChat for TenonLog {
     fn as_chat_lines_with_sign(&self, is_processing: bool) -> (Vec<String>, SignIcon) {
-        match &self.data {
+        match self.data() {
             TenonLogData::User(TenonUserMessage::Text(TenonUserTextMessage(msg))) => {
                 (msg.lines().map(|x| x.to_string()).collect(), SignIcon::User)
             }

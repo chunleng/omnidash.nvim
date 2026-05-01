@@ -4,6 +4,7 @@ use rig::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use skimtoken::estimate_tokens;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenonUserTextMessage(pub String);
@@ -130,13 +131,104 @@ pub enum TenonLogData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenonLog {
+    token_count: usize,
     #[serde(flatten)]
-    pub data: TenonLogData,
+    data: TenonLogData,
 }
 
 impl TenonLog {
     pub fn new(data: TenonLogData) -> Self {
-        Self { data }
+        let token_count = data.count_tokens();
+        Self { data, token_count }
+    }
+
+    pub fn data(&self) -> &TenonLogData {
+        &self.data
+    }
+
+    /// Updates the tool result and recalculates token count.
+    /// Panics if this is not a Tool log.
+    pub fn set_tool_result(&mut self, result: Option<Result<TenonToolResult, TenonToolError>>) {
+        match &mut self.data {
+            TenonLogData::Tool(tool_log) => {
+                tool_log.tool_result = result;
+                self.token_count = self.data.count_tokens();
+            }
+            _ => panic!("set_tool_result called on non-Tool TenonLog"),
+        }
+    }
+
+    /// Appends reasoning text. As reasoning is omitted from token count, there's no need to
+    /// count_tokens
+    /// Returns true if an existing Assistant message was updated, false if a new one was created.
+    pub fn append_reasoning(&mut self, reasoning: &str) -> bool {
+        match &mut self.data {
+            TenonLogData::Assistant(msg) => {
+                match &mut msg.reasoning {
+                    Some(text) => text.push_str(reasoning),
+                    None => msg.reasoning = Some(reasoning.to_string()),
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Appends text content and recalculates token count.
+    /// Returns true if an existing Assistant message was updated, false if a new one was created.
+    pub fn append_text(&mut self, text: &str) -> bool {
+        match &mut self.data {
+            TenonLogData::Assistant(msg) => {
+                if let Some(TenonAssistantMessageContent::Text(last_text)) = msg.content.last_mut()
+                {
+                    last_text.push_str(text);
+                } else {
+                    msg.content
+                        .push(TenonAssistantMessageContent::Text(text.to_string()));
+                }
+                self.token_count = self.data.count_tokens();
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+fn count_tokens(text: &str) -> usize {
+    estimate_tokens(text)
+}
+
+impl TenonLogData {
+    fn count_tokens(&self) -> usize {
+        match self {
+            TenonLogData::User(msg) => match msg {
+                TenonUserMessage::Text(TenonUserTextMessage(text)) => count_tokens(text),
+            },
+            TenonLogData::Assistant(msg) => {
+                // Reasoning is not counted because it's not used for sending request
+                let content_tokens = msg
+                    .content
+                    .iter()
+                    .map(|c| match c {
+                        TenonAssistantMessageContent::Text(text) => count_tokens(text),
+                    })
+                    .sum::<usize>();
+                content_tokens
+            }
+            TenonLogData::Tool(log) => {
+                let call_tokens = count_tokens(&log.tool_call.name)
+                    + count_tokens(&log.tool_call.args.to_string());
+                let result_tokens = match &log.tool_result {
+                    None => 0,
+                    Some(Ok(res)) => match res {
+                        TenonToolResult::Text(text) => count_tokens(&text.text),
+                        TenonToolResult::Image(_) => 0, // Images don't have simple token count
+                    },
+                    Some(Err(err)) => count_tokens(&err.0),
+                };
+                call_tokens + result_tokens
+            }
+        }
     }
 }
 

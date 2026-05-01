@@ -317,14 +317,7 @@ impl ChatSession {
 
                     let trailing_start = logs_vec
                         .iter()
-                        .rposition(|log| {
-                            !matches!(
-                                log,
-                                TenonLog {
-                                    data: TenonLogData::Tool(_)
-                                }
-                            )
-                        })
+                        .rposition(|log| !matches!(log.data(), TenonLogData::Tool(_)))
                         .map(|i| i + 1)
                         .unwrap_or(0);
 
@@ -332,10 +325,7 @@ impl ChatSession {
                         .iter()
                         .cloned()
                         .filter(|log| {
-                            if let TenonLog {
-                                data: TenonLogData::Tool(tool_log),
-                            } = log
-                            {
+                            if let TenonLogData::Tool(tool_log) = log.data() {
                                 tool_log.tool_result.is_some()
                             } else {
                                 true
@@ -381,16 +371,16 @@ impl ChatSession {
                             internal_call_id,
                         }) => {
                             if let Ok(mut logs) = logs_clone.write() {
-                                if let Some(log) = logs.iter_mut().find_map(|x| match x {
-                                    TenonLog {
-                                        data: TenonLogData::Tool(tool),
-                                    } if tool.tool_call.internal_call_id == internal_call_id => {
-                                        Some(tool)
+                                if let Some(log) = logs.iter_mut().find_map(|x| {
+                                    if let TenonLogData::Tool(tool) = x.data() {
+                                        if tool.tool_call.internal_call_id == internal_call_id {
+                                            return Some(x);
+                                        }
                                     }
-                                    _ => None,
+                                    None
                                 }) {
                                     let tool_result = tool_result.content.first();
-                                    log.tool_result = Some(match tool_result {
+                                    let result = match tool_result {
                                         ToolResultContent::Text(text) => {
                                             if text.text.starts_with("Toolset error: ") {
                                                 Err(TenonToolError(text.text))
@@ -401,29 +391,16 @@ impl ChatSession {
                                         ToolResultContent::Image(img) => {
                                             Ok(TenonToolResult::Image(img))
                                         }
-                                    });
+                                    };
+                                    log.set_tool_result(Some(result));
                                 }
                             }
                         }
                         Ok(StreamItem::ReasoningDelta { reasoning }) => {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
-                                if let Some(log) = logs.back_mut()
-                                    && let TenonLog {
-                                        data:
-                                            TenonLogData::Assistant(TenonAssistantMessage {
-                                                reasoning: text,
-                                                ..
-                                            }),
-                                    } = log
-                                {
-                                    match text {
-                                        Some(x) => {
-                                            x.push_str(&reasoning);
-                                        }
-                                        None => *text = Some(reasoning.clone()),
-                                    }
-                                    updated = true;
+                                if let Some(log) = logs.back_mut() {
+                                    updated = log.append_reasoning(&reasoning);
                                 }
 
                                 if !updated {
@@ -439,25 +416,8 @@ impl ChatSession {
                         Ok(StreamItem::Text { text }) => {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
-                                if let Some(log) = logs.back_mut()
-                                    && let TenonLog {
-                                        data:
-                                            TenonLogData::Assistant(TenonAssistantMessage {
-                                                content,
-                                                ..
-                                            }),
-                                    } = log
-                                {
-                                    if let Some(TenonAssistantMessageContent::Text(s)) =
-                                        content.last_mut()
-                                    {
-                                        s.push_str(&text);
-                                        updated = true;
-                                    } else {
-                                        content
-                                            .push(TenonAssistantMessageContent::Text(text.clone()));
-                                        updated = true
-                                    }
+                                if let Some(log) = logs.back_mut() {
+                                    updated = log.append_text(&text);
                                 }
 
                                 if !updated {

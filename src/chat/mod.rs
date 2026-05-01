@@ -4,7 +4,7 @@ use crate::{
     tools::resolve_tools,
     utils::GLOBAL_EXECUTION_HANDLER,
 };
-use chrono::Local;
+use chrono::{DateTime, Local};
 use nvim_oxi::{Result as OxiResult, api::types::LogLevel};
 use rig::{
     completion::Usage,
@@ -65,6 +65,7 @@ pub struct ChatSession {
     pub logs: Arc<RwLock<LinkedList<TenonLog>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
     pub active_agent: ActiveAgent,
+    pub session_datetime: DateTime<Local>,
     cancel_token: Arc<AtomicBool>,
     active_thread: Option<std::thread::JoinHandle<()>>,
     cancel_title_token: Arc<AtomicBool>,
@@ -91,10 +92,6 @@ pub struct TenonAgent {
     pub tool_names: Vec<String>,
 }
 
-const SYSTEM_BEHAVIOR: &str = "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
-    User may edit files between steps → files change silently. File ≠ expected → user edited → re-read → preserve changes. \
-    Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours.";
-
 impl TenonAgent {
     pub fn new(
         model: SupportedModels,
@@ -108,9 +105,20 @@ impl TenonAgent {
         }
     }
 
-    pub fn build_chat_adapter(&self, tools: Vec<Box<dyn ToolDyn>>) -> ChatAgent {
+    pub fn build_chat_adapter(
+        &self,
+        tools: Vec<Box<dyn ToolDyn>>,
+        session_datetime: DateTime<Local>,
+    ) -> ChatAgent {
+        let system_with_datetime = format!(
+            "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
+            User may edit files between steps → files change silently. File ≠ expected → user edited → re-read → preserve changes. \
+            Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours. \
+            Session started: {}",
+            session_datetime.format("%a %b %d, %Y %H:%M %Z").to_string()
+        );
         let mut combined = vec![BehaviorSource::Text {
-            value: SYSTEM_BEHAVIOR.to_string(),
+            value: system_with_datetime,
         }];
         combined.extend(self.behavior.iter().cloned());
         get_agent(self.model.clone(), combined, tools)
@@ -137,6 +145,7 @@ impl ChatSession {
                     .ok_or(nvim_oxi::Error::Mlua(mlua::Error::RuntimeError("".into())))?
                     .clone(),
             },
+            session_datetime: Local::now(),
             cancel_token: Arc::new(AtomicBool::new(false)),
             active_thread: None,
             cancel_title_token: Arc::new(AtomicBool::new(false)),
@@ -173,6 +182,7 @@ impl ChatSession {
                 name: agent_name,
                 inner: agent,
             },
+            session_datetime: history.session_datetime,
             cancel_token: Arc::new(AtomicBool::new(false)),
             active_thread: None,
             cancel_title_token: Arc::new(AtomicBool::new(false)),
@@ -295,6 +305,7 @@ impl ChatSession {
         let agent_clone = self.active_agent.clone();
         let chat_id = self.id.clone();
         let title_clone = Arc::clone(&self.title);
+        let session_datetime = self.session_datetime.clone();
 
         self.active_thread = Some(std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -331,7 +342,7 @@ impl ChatSession {
                 }
 
                 let tools = resolve_tools(&agent_clone.tool_names);
-                let agent = agent_clone.build_chat_adapter(tools);
+                let agent = agent_clone.build_chat_adapter(tools, session_datetime);
                 let chat_history;
                 if let Ok(logs) = logs_clone.read() {
                     chat_history = logs
@@ -468,6 +479,7 @@ impl ChatSession {
                                 title_val.as_deref(),
                                 &agent_clone.name,
                                 &agent_clone.inner.model.display_name(),
+                                session_datetime,
                                 &logs_clone,
                                 &usage_clone,
                                 &history_dir,

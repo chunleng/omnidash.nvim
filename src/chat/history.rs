@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use rig::completion::Usage;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -6,6 +7,10 @@ use std::{
 };
 
 use super::TenonLog;
+
+fn session_datetime_now() -> DateTime<Local> {
+    Local::now()
+}
 
 /// Serializable snapshot of a chat session, written to `.tenon/history/<id>.json`
 /// on `StreamItem::Final`.
@@ -17,6 +22,9 @@ pub struct ChatHistory {
     pub model_display: String,
     pub usage: Option<Usage>,
     pub logs: Vec<TenonLog>,
+    /// Datetime when the session was created. Defaults to current time for legacy history files.
+    #[serde(default = "session_datetime_now")]
+    pub session_datetime: DateTime<Local>,
 }
 
 pub fn save_to_history(
@@ -24,6 +32,7 @@ pub fn save_to_history(
     title: Option<&str>,
     agent_name: &str,
     model_display: &str,
+    session_datetime: DateTime<Local>,
     logs: &Arc<RwLock<LinkedList<TenonLog>>>,
     usage: &Arc<RwLock<Option<Usage>>>,
     history_directory: &str,
@@ -42,6 +51,7 @@ pub fn save_to_history(
         model_display: model_display.to_string(),
         usage: usage_val,
         logs: logs_vec,
+        session_datetime: session_datetime,
     };
 
     if let Ok(cwd) = std::env::current_dir() {

@@ -296,6 +296,15 @@ impl ChatSession {
         }
     }
 
+    /// Returns the total token count from all logs in this session.
+    pub fn total_token_count(&self) -> usize {
+        if let Ok(logs) = self.logs.read() {
+            logs.iter().map(|log| log.token_count()).sum()
+        } else {
+            0
+        }
+    }
+
     pub fn send_message(&mut self, message: String) {
         // Cancel previous thread
         self.cancel_token.store(true, Ordering::SeqCst);

@@ -178,6 +178,7 @@ impl ChatDisplay {
                         .and_then(|t| t.clone())
                         .map(|t| format!("{} ", t))
                         .unwrap_or_default();
+                    let next_send_tokens = chat_session.total_token_count();
                     drop(chat_session);
                     drop(chat);
                     let added = tool_added_clone.load(Ordering::SeqCst);
@@ -223,8 +224,8 @@ impl ChatDisplay {
                             (0, 0, 0, 0)
                         };
                         content.push(format!(
-                            "{} 󰕒 | {} 󰇚 | {}  | {} total",
-                            input, output, cached, total
+                            "tokens: {}~ | usage: {} 󰕒 + {} 󰇚 + {}   = {} total",
+                            next_send_tokens, input, output, cached, total,
                         ));
                         usage_buf_line = Some(frozen_line_count + content.len() - 1);
                     }

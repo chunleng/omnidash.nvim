@@ -211,15 +211,11 @@ impl TenonLog {
     }
 }
 
-fn count_tokens(text: &str) -> usize {
-    estimate_tokens(text)
-}
-
 impl TenonLogData {
     fn count_tokens(&self) -> usize {
         match self {
             TenonLogData::User(msg) => match msg {
-                TenonUserMessage::Text(TenonUserTextMessage(text)) => count_tokens(text),
+                TenonUserMessage::Text(TenonUserTextMessage(text)) => estimate_tokens(text),
             },
             TenonLogData::Assistant(msg) => {
                 // Reasoning is not counted because it's not used for sending request
@@ -227,21 +223,21 @@ impl TenonLogData {
                     .content
                     .iter()
                     .map(|c| match c {
-                        TenonAssistantMessageContent::Text(text) => count_tokens(text),
+                        TenonAssistantMessageContent::Text(text) => estimate_tokens(text),
                     })
                     .sum::<usize>();
                 content_tokens
             }
             TenonLogData::Tool(log) => {
-                let call_tokens = count_tokens(&log.tool_call.name)
-                    + count_tokens(&log.tool_call.args.to_string());
+                let call_tokens = estimate_tokens(&log.tool_call.name)
+                    + estimate_tokens(&log.tool_call.args.to_string());
                 let result_tokens = match &log.tool_result {
                     None => 0,
                     Some(Ok(res)) => match res {
-                        TenonToolResult::Text(text) => count_tokens(&text.text),
+                        TenonToolResult::Text(text) => estimate_tokens(&text.text),
                         TenonToolResult::Image(_) => 0, // Images don't have simple token count
                     },
-                    Some(Err(err)) => count_tokens(&err.0),
+                    Some(Err(err)) => estimate_tokens(&err.0),
                 };
                 call_tokens + result_tokens
             }

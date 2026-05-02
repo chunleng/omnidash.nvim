@@ -11,9 +11,11 @@ use rig::{
     message::{Message, ToolResultContent},
 };
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     sync::{Arc, LazyLock, Mutex, RwLock},
 };
+
+const MAX_CONTEXT_TOKENS: usize = 20_000;
 
 pub mod history;
 pub mod log;
@@ -61,6 +63,8 @@ pub struct ChatSession {
     pub id: String,
     pub title: Arc<RwLock<Option<String>>>,
     pub logs: Arc<RwLock<Vec<TenonLog>>>,
+    pub rag_logs: Arc<RwLock<Vec<TenonLog>>>,
+    pub resume_from: Arc<AtomicUsize>,
     pub usage: Arc<RwLock<Option<Usage>>>,
     pub active_agent: ActiveAgent,
     pub session_datetime: DateTime<Local>,
@@ -141,6 +145,8 @@ impl ChatSession {
             id: generate_chat_id(),
             title: Arc::new(RwLock::new(None)),
             logs: Arc::new(RwLock::new(Vec::new())),
+            rag_logs: Arc::new(RwLock::new(Vec::new())),
+            resume_from: Arc::new(AtomicUsize::new(0)),
             usage: Arc::new(RwLock::new(None)),
             active_agent: ActiveAgent {
                 name: agent_name.to_string(),
@@ -185,10 +191,12 @@ impl ChatSession {
             })
             .collect();
 
-        Ok(Self {
+        let session = Self {
             id: history.id,
             title: Arc::new(RwLock::new(history.title)),
             logs: Arc::new(RwLock::new(logs)),
+            rag_logs: Arc::new(RwLock::new(Vec::new())),
+            resume_from: Arc::new(AtomicUsize::new(0)),
             usage: Arc::new(RwLock::new(history.usage)),
             active_agent: ActiveAgent {
                 name: agent_name,
@@ -199,7 +207,12 @@ impl ChatSession {
             active_thread: None,
             cancel_title_token: Arc::new(AtomicBool::new(false)),
             title_thread: None,
-        })
+        };
+
+        // Apply truncation on restore
+        session.apply_context_truncation();
+
+        Ok(session)
     }
 
     pub fn cancel(&mut self) {
@@ -301,10 +314,105 @@ impl ChatSession {
         }
     }
 
-    /// Returns the total token count from all logs in this session.
-    pub fn total_token_count(&self) -> usize {
+    /// Returns true if the log entry is a user message.
+    fn is_user_log(log: &TenonLog) -> bool {
+        matches!(log.data(), TenonLogData::User(_))
+    }
+
+    /// Finds the next user message index starting from `start_idx`.
+    /// Returns None if no user message is found.
+    fn find_next_user_index(logs: &[TenonLog], start_idx: usize) -> Option<usize> {
+        logs.iter()
+            .enumerate()
+            .skip(start_idx)
+            .find(|(_, log)| Self::is_user_log(log))
+            .map(|(i, _)| i)
+    }
+
+    /// Applies context truncation if token count exceeds MAX_CONTEXT_TOKENS.
+    /// Copies truncated logs to rag_logs and updates resume_from.
+    /// Logs remain in self.logs for display purposes.
+    /// The last user/assistant exchange is always preserved.
+    fn apply_context_truncation(&self) {
         if let Ok(logs) = self.logs.read() {
-            logs.iter().map(|log| log.token_count()).sum::<usize>()
+            let current_resume = self.resume_from.load(Ordering::SeqCst);
+            let agent_tokens = self.active_agent.token_count();
+
+            // Find the last user message - this is the boundary we cannot cross
+            let last_user_idx = logs
+                .iter()
+                .rposition(|log| Self::is_user_log(log))
+                .unwrap_or(0);
+
+            // Minimum boundary: we must keep the last exchange
+            let min_resume = last_user_idx.min(logs.len().saturating_sub(1));
+
+            // Calculate tokens from current resume_from
+            let mut total_tokens: usize = agent_tokens;
+            for log in logs.iter().skip(current_resume) {
+                total_tokens += log.token_count();
+            }
+
+            // If under threshold, no truncation needed
+            if total_tokens <= MAX_CONTEXT_TOKENS {
+                return;
+            }
+
+            // Need to truncate - find new resume_from
+            let mut new_resume = current_resume;
+
+            // Move resume_from forward until we're under threshold
+            for log in logs.iter().skip(current_resume) {
+                let log_tokens = log.token_count();
+                total_tokens -= log_tokens;
+                new_resume += 1;
+
+                if total_tokens <= MAX_CONTEXT_TOKENS {
+                    break;
+                }
+            }
+
+            // Adjust to next user message if we landed on non-user
+            if new_resume < logs.len() && !Self::is_user_log(&logs[new_resume]) {
+                if let Some(user_idx) = Self::find_next_user_index(&logs, new_resume) {
+                    new_resume = user_idx;
+                }
+            }
+
+            // Never truncate past the last exchange
+            new_resume = new_resume.min(min_resume);
+
+            // Only update if we're actually moving forward
+            if new_resume <= current_resume {
+                return;
+            }
+
+            // Copy truncated logs to rag_logs (keep in self.logs for display)
+            drop(logs);
+            if let Ok(logs) = self.logs.read() {
+                if let Ok(mut rag_logs) = self.rag_logs.write() {
+                    for log in logs
+                        .iter()
+                        .skip(current_resume)
+                        .take(new_resume - current_resume)
+                    {
+                        rag_logs.push(log.clone());
+                    }
+                }
+            }
+
+            self.resume_from.store(new_resume, Ordering::SeqCst);
+        }
+    }
+
+    /// Returns the total token count from logs starting at resume_from.
+    pub fn total_token_count(&self) -> usize {
+        let resume_idx = self.resume_from.load(Ordering::SeqCst);
+        if let Ok(logs) = self.logs.read() {
+            logs.iter()
+                .skip(resume_idx)
+                .map(|log| log.token_count())
+                .sum::<usize>()
                 + self.active_agent.token_count()
         } else {
             0
@@ -322,12 +430,16 @@ impl ChatSession {
         // Generate title if not already set
         self.generate_title(message.clone());
 
+        // Apply context truncation if needed
+        self.apply_context_truncation();
+
         let logs_clone = Arc::clone(&self.logs);
         let usage_clone = Arc::clone(&self.usage);
         let agent_clone = self.active_agent.clone();
         let chat_id = self.id.clone();
         let title_clone = Arc::clone(&self.title);
         let session_datetime = self.session_datetime.clone();
+        let resume_from = Arc::clone(&self.resume_from);
 
         self.active_thread = Some(std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -366,9 +478,11 @@ impl ChatSession {
                 // let tools = resolve_tools(&agent_clone.tool_names);
                 let agent = agent_clone.build_chat_adapter(session_datetime);
                 let chat_history;
+                let resume_idx = resume_from.load(Ordering::SeqCst);
                 if let Ok(logs) = logs_clone.read() {
                     chat_history = logs
                         .iter()
+                        .skip(resume_idx)
                         .cloned()
                         .flat_map(|x| Vec::<Message>::from(x))
                         .collect::<Vec<_>>();

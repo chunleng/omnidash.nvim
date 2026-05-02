@@ -112,7 +112,8 @@ impl TenonAgent {
         let system_with_datetime = format!(
             "Output markdown. Concise, not verbose. No filler or hedging or unnecessary words. Reduce emoji use. \
             User may edit files between steps → files change silently. File ≠ expected → user edited → re-read → preserve changes. \
-            Chat history may span agents with different tools/behavior. Prior assistant actions ≠ yours. \
+            History shows active behavior/prompt at that time. Prior actions may span agents → trust reported behavior. \
+            Earlier history may be truncated. Missing context → ask user for clarification. \
             Session started: {}",
             session_datetime.format("%a %b %d, %Y %H:%M %Z").to_string()
         );
@@ -129,8 +130,8 @@ impl TenonAgent {
 
     pub fn token_count(&self) -> usize {
         // TODO: make tool estimate count with actual definition
-        // NOTE: 84 is from skimtoken estimation of system prompt
-        self.tool_names.len() * 150 + 84
+        // NOTE: 116 is from skimtoken estimation of system prompt
+        self.tool_names.len() * 150 + 116
     }
 }
 

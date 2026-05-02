@@ -56,6 +56,7 @@ pub struct ChatDisplay {
     spinner_frame: Arc<AtomicUsize>,
     tool_added: Arc<AtomicUsize>,
     tool_removed: Arc<AtomicUsize>,
+    token_count: Arc<AtomicUsize>,
     running_thread: Option<Arc<JoinHandle<()>>>,
 }
 
@@ -70,6 +71,7 @@ impl ChatDisplay {
             spinner_frame: Arc::new(AtomicUsize::new(0)),
             tool_added: Arc::new(AtomicUsize::new(0)),
             tool_removed: Arc::new(AtomicUsize::new(0)),
+            token_count: Arc::new(AtomicUsize::new(0)),
             running_thread: None,
         }
     }
@@ -96,6 +98,7 @@ impl ChatDisplay {
             let spinner_frame_clone = spinner_frame.clone();
             let tool_added_clone = tool_added.clone();
             let tool_removed_clone = tool_removed.clone();
+            let token_count_clone = self.token_count.clone();
             move || {
                 let (logs, usage_clone) = {
                     if let Ok(chat) = attached_chat.read()
@@ -178,7 +181,6 @@ impl ChatDisplay {
                         .and_then(|t| t.clone())
                         .map(|t| format!("{} ", t))
                         .unwrap_or_default();
-                    let next_send_tokens = chat_session.total_token_count();
                     drop(chat_session);
                     drop(chat);
                     let added = tool_added_clone.load(Ordering::SeqCst);
@@ -225,7 +227,11 @@ impl ChatDisplay {
                         };
                         content.push(format!(
                             "tokens: {}~ | usage: {} 󰕒 + {} 󰇚 + {}   = {} total",
-                            next_send_tokens, input, output, cached, total,
+                            token_count_clone.load(Ordering::Relaxed),
+                            input,
+                            output,
+                            cached,
+                            total,
                         ));
                         usage_buf_line = Some(frozen_line_count + content.len() - 1);
                     }
@@ -347,6 +353,7 @@ impl ChatDisplay {
             let spinner_frame = self.spinner_frame.clone();
             let tool_added = self.tool_added.clone();
             let tool_removed = self.tool_removed.clone();
+            let token_count = self.token_count.clone();
             move || {
                 // Set true so that the first run will alway try to redraw
                 let mut previous_processing_state = true;
@@ -382,6 +389,8 @@ impl ChatDisplay {
                                     .chat_session
                                     .read()
                                     .unwrap_or_else(|x| x.into_inner());
+                                token_count
+                                    .store(chat_session.total_token_count(), Ordering::Relaxed);
                                 (
                                     chat_session.active_agent.name.clone(),
                                     chat_session.active_agent.tool_names.clone(),

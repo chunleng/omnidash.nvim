@@ -1,10 +1,7 @@
 use chrono::{DateTime, Local};
 use rig::completion::Usage;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::LinkedList,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use super::TenonLog;
 
@@ -33,7 +30,7 @@ pub fn save_to_history(
     agent_name: &str,
     model_display: &str,
     session_datetime: DateTime<Local>,
-    logs: &Arc<RwLock<LinkedList<TenonLog>>>,
+    logs: &Arc<RwLock<Vec<TenonLog>>>,
     usage: &Arc<RwLock<Option<Usage>>>,
     history_directory: &str,
 ) {

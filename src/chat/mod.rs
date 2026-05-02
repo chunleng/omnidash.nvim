@@ -11,7 +11,6 @@ use rig::{
     message::{Message, ToolResultContent},
 };
 use std::{
-    collections::LinkedList,
     sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, LazyLock, Mutex, RwLock},
 };
@@ -61,7 +60,7 @@ fn generate_chat_id() -> String {
 pub struct ChatSession {
     pub id: String,
     pub title: Arc<RwLock<Option<String>>>,
-    pub logs: Arc<RwLock<LinkedList<TenonLog>>>,
+    pub logs: Arc<RwLock<Vec<TenonLog>>>,
     pub usage: Arc<RwLock<Option<Usage>>>,
     pub active_agent: ActiveAgent,
     pub session_datetime: DateTime<Local>,
@@ -141,7 +140,7 @@ impl ChatSession {
         Ok(Self {
             id: generate_chat_id(),
             title: Arc::new(RwLock::new(None)),
-            logs: Arc::new(RwLock::new(LinkedList::new())),
+            logs: Arc::new(RwLock::new(Vec::new())),
             usage: Arc::new(RwLock::new(None)),
             active_agent: ActiveAgent {
                 name: agent_name.to_string(),
@@ -177,7 +176,7 @@ impl ChatSession {
                 ))
             })?;
 
-        let logs: LinkedList<TenonLog> = history
+        let logs: Vec<TenonLog> = history
             .logs
             .into_iter()
             .map(|mut log| {
@@ -360,7 +359,7 @@ impl ChatSession {
                     logs_vec.extend(trailing_tools);
 
                     for log in logs_vec {
-                        logs.push_back(log);
+                        logs.push(log);
                     }
                 }
 
@@ -378,7 +377,7 @@ impl ChatSession {
                 }
 
                 if let Ok(mut logs) = logs_clone.write() {
-                    logs.push_back(TenonLog::new(TenonLogData::User(TenonUserMessage::Text(
+                    logs.push(TenonLog::new(TenonLogData::User(TenonUserMessage::Text(
                         TenonUserTextMessage(message.clone()),
                     ))))
                 }
@@ -422,12 +421,12 @@ impl ChatSession {
                         Ok(StreamItem::ReasoningDelta { reasoning }) => {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
-                                if let Some(log) = logs.back_mut() {
+                                if let Some(log) = logs.last_mut() {
                                     updated = log.append_reasoning(&reasoning);
                                 }
 
                                 if !updated {
-                                    logs.push_back(TenonLog::new(TenonLogData::Assistant(
+                                    logs.push(TenonLog::new(TenonLogData::Assistant(
                                         TenonAssistantMessage {
                                             reasoning: Some(reasoning),
                                             content: vec![],
@@ -439,12 +438,12 @@ impl ChatSession {
                         Ok(StreamItem::Text { text }) => {
                             if let Ok(mut logs) = logs_clone.write() {
                                 let mut updated = false;
-                                if let Some(log) = logs.back_mut() {
+                                if let Some(log) = logs.last_mut() {
                                     updated = log.append_text(&text);
                                 }
 
                                 if !updated {
-                                    logs.push_back(TenonLog::new(TenonLogData::Assistant(
+                                    logs.push(TenonLog::new(TenonLogData::Assistant(
                                         TenonAssistantMessage {
                                             reasoning: None,
                                             content: vec![TenonAssistantMessageContent::Text(text)],
@@ -458,7 +457,7 @@ impl ChatSession {
                             internal_call_id,
                         }) => {
                             if let Ok(mut logs) = logs_clone.write() {
-                                logs.push_back(TenonLog::new(TenonLogData::Tool(TenonToolLog {
+                                logs.push(TenonLog::new(TenonLogData::Tool(TenonToolLog {
                                     tool_call: TenonToolCall {
                                         id: tool_call.id,
                                         internal_call_id: internal_call_id,

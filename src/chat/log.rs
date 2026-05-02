@@ -187,11 +187,12 @@ impl TenonLog {
                 if let Some(TenonAssistantMessageContent::Text(last_text)) = msg.content.last_mut()
                 {
                     last_text.push_str(text);
+                    self.token_count += estimate_tokens(text);
                 } else {
                     msg.content
                         .push(TenonAssistantMessageContent::Text(text.to_string()));
+                    self.token_count = self.data.count_tokens();
                 }
-                self.token_count = self.data.count_tokens();
                 true
             }
             _ => false,

@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     config::{TenonConfig, user::TenonUserConfig},
-    keymap::create_lua_keymap_module,
+    lua_modules::keymap::create_lua_keymap_module,
     ui::ChatWindow,
     utils::{GLOBAL_EXECUTION_HANDLER, notify},
 };
@@ -30,7 +30,7 @@ pub fn get_application_config() -> TenonConfig {
 mod chat;
 mod clients;
 mod config;
-mod keymap;
+mod lua_modules;
 mod mcp;
 mod tools;
 mod ui;

@@ -1,0 +1,131 @@
+use nvim_oxi::{Dictionary, Function, Object, api::Buffer, conversion::FromObject};
+
+use crate::{get_chat_window, utils::format_path_relative};
+
+pub fn create_lua_action_module() -> Dictionary {
+    let mut action_dict = Dictionary::new();
+    action_dict.insert("insert_selection", Object::from(insert_selection_fn()));
+    action_dict
+}
+
+/// Insert a code selection from a buffer into the chat input.
+///
+/// Parameters (from Lua, 1-indexed):
+/// - bufnr: buffer number
+/// - start_line: start line (1-indexed)
+/// - start_col: start column byte offset (1-indexed, or nil for whole line)
+/// - end_line: end line (1-indexed)
+/// - end_col: end column byte offset (1-indexed, inclusive, or nil for whole line)
+fn insert_selection_fn() -> Function<(i32, usize, Option<usize>, usize, Option<usize>), ()> {
+    Function::from_fn(
+        |(bufnr, start_line, start_col, end_line, end_col): (
+            i32,
+            usize,
+            Option<usize>,
+            usize,
+            Option<usize>,
+        )| {
+            let buf = Buffer::from(bufnr);
+
+            // Get buffer filename and filetype
+            let filepath = buf.get_name().ok().map(|p| p.to_string_lossy().to_string());
+            let filename = filepath.as_ref().map(|path| format_path_relative(path));
+            #[allow(deprecated)]
+            let filetype: String = buf
+                .get_option("filetype")
+                .ok()
+                .and_then(|obj| String::from_object(obj).ok())
+                .unwrap_or("text".to_string());
+
+            // Convert from 1-indexed (Lua) to 0-indexed (nvim_oxi)
+            // For lines 5-6 (1-indexed), we want 0-indexed rows 4-5, range 4..6
+            let line_start = start_line.saturating_sub(1);
+            let line_end = end_line.saturating_sub(1);
+
+            let col_start = start_col.map(|c| c.saturating_sub(1)).unwrap_or(0);
+
+            // For end column, None means full line - we need to get the line length
+            let last_line_idx = end_line.saturating_sub(1);
+            let last_line_text: String = buf
+                .get_lines(last_line_idx..end_line, false)
+                .ok()
+                .and_then(|lines| lines.into_iter().next())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let col_end = end_col.unwrap_or_else(|| last_line_text.len());
+
+            // Get the selected text
+            let text_lines: Vec<String> = buf
+                .get_text(
+                    line_start..line_end,
+                    col_start,
+                    col_end,
+                    &nvim_oxi::api::opts::GetTextOpts::default(),
+                )
+                .map(|iter| iter.map(|s| s.to_string()).collect())
+                .unwrap_or_default();
+
+            if text_lines.is_empty() {
+                return;
+            }
+
+            // Detect partial lines (full line when col is None)
+            let first_line_full = start_col.is_none() || start_col.unwrap_or(1) <= 1;
+            let last_line_full = end_col.is_none() || end_col.unwrap_or(0) >= last_line_text.len();
+
+            // Build snippet with ellipsis for partial lines
+            let text_lines_len = text_lines.len();
+            let mut snippet_lines = Vec::new();
+            for (i, line) in text_lines.into_iter().enumerate() {
+                let mut line_text = line;
+                if i == 0 && !first_line_full {
+                    line_text = format!("...{}", line_text);
+                }
+                if i == text_lines_len - 1 && !last_line_full {
+                    line_text = format!("{}...", line_text);
+                }
+                snippet_lines.push(line_text);
+            }
+            let snippet_text = snippet_lines.join("\n");
+
+            // Format as markdown
+            // end_line from Vim is exclusive (line after last), so display_end = end_line - 1
+            let header = if let Some(ref name) = filename {
+                if start_line == end_line {
+                    format!("Snippet from {} Line {}\n", name, start_line)
+                } else {
+                    format!("Snippet from {} Lines {}-{}\n", name, start_line, end_line)
+                }
+            } else if start_line == end_line {
+                format!("Snippet Line {}\n", start_line)
+            } else {
+                format!("Snippet Lines {}-{}\n", start_line, end_line)
+            };
+
+            // Escape triple backticks at line start
+            let escaped_snippet = snippet_text
+                .lines()
+                .map(|line| {
+                    if line.starts_with("```") {
+                        format!("\\`\\`\\`{}", &line[3..])
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let markdown = format!(
+                "{}\n```{}\n{}\n```\n",
+                header.trim_end(),
+                filetype,
+                escaped_snippet
+            );
+
+            // Append to chat input using the existing method
+            if let Ok(mut win) = get_chat_window().lock() {
+                let _ = win.insert_to_input(markdown);
+            }
+        },
+    )
+}

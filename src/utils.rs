@@ -12,6 +12,19 @@ use nvim_oxi::{
 };
 use serde_json::Value;
 
+/// Convert an absolute path to a relative path (./relative) if within cwd,
+/// or return the absolute path if outside cwd.
+pub fn format_path_relative(path: &str) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| {
+            let cwd_str = cwd.to_string_lossy();
+            path.strip_prefix(cwd_str.as_ref())
+                .map(|rest| format!("./{}", rest.trim_start_matches('/')))
+        })
+        .unwrap_or_else(|| path.to_string())
+}
+
 fn escape_lua_string(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('\n', "\\n")

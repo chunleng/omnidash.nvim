@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     config::{TenonConfig, user::TenonUserConfig},
-    lua_modules::keymap::create_lua_keymap_module,
+    lua_modules::{action::create_lua_action_module, keymap::create_lua_keymap_module},
     ui::ChatWindow,
     utils::{GLOBAL_EXECUTION_HANDLER, notify},
 };
@@ -119,6 +119,7 @@ fn tenon() -> OxiResult<Dictionary> {
     module.insert("toggle", Object::from(toggle_fn));
     module.insert("close", Object::from(close_fn));
     module.insert("keymap", Object::from(create_lua_keymap_module()));
+    module.insert("action", Object::from(create_lua_action_module()));
 
     Ok(module)
 }

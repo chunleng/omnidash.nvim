@@ -144,6 +144,50 @@ impl ChatWindow {
         Ok(())
     }
 
+    /// Insert text into the input buffer and move cursor to the end.
+    pub fn insert_to_input(&mut self, text: String) -> OxiResult<()> {
+        let input_panel = self.get_or_create_input_window()?;
+
+        if let Some(mut input_win_buffer) = input_panel.active_widget().buffer().get_buffer() {
+            let current_lines: Vec<String> = input_win_buffer
+                .get_lines(0.., false)?
+                .map(|s| s.to_string())
+                .collect();
+
+            let text_lines: Vec<String> = text.lines().map(|s| s.to_string()).collect();
+
+            let (start_index, replacement_lines) = if current_lines.is_empty() {
+                (0, text_lines)
+            } else {
+                let last_index = current_lines.len() - 1;
+                let last_line = &current_lines[last_index];
+
+                if last_line.is_empty() {
+                    // Replace empty last line with new text
+                    (last_index, text_lines)
+                } else {
+                    // Append after last line: replace last line with itself + first text line, then rest
+                    let mut replacement = vec![last_line.clone()];
+                    replacement.extend(text_lines);
+                    (last_index, replacement)
+                }
+            };
+
+            let line_count = start_index + replacement_lines.len();
+            let last_line_len = replacement_lines.last().map(|l| l.len()).unwrap_or(0);
+
+            let _ = input_win_buffer.set_lines(start_index.., false, replacement_lines);
+
+            // Move cursor to the end of the input buffer
+            // Line indices are 0-based, but cursor position uses 0-based line and 0-based column
+            let win = input_panel.window.get_window();
+            if let Some(mut win) = win {
+                win.set_cursor(line_count.saturating_sub(1), last_line_len)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn stop_streaming(&mut self) -> OxiResult<()> {
         if let Ok(loaded) = self.loaded_chat_session.read() {
             if let Ok(mut chat_session) = loaded.write() {

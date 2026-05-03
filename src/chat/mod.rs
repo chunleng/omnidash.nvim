@@ -8,8 +8,9 @@ use chrono::{DateTime, Local};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use nvim_oxi::{Result as OxiResult, api::types::LogLevel};
 use rig::{
+    OneOrMany,
     completion::Usage,
-    message::{Message, ToolResultContent},
+    message::{Message, ToolResultContent, UserContent},
 };
 use std::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -639,26 +640,30 @@ impl ChatSession {
                 let rag_context =
                     build_rag_context(&rag_logs_clone, &rag_embeddings_clone, &message);
 
-                // Build chat_history with optional RAG context
-                let chat_history;
+                // Build chat_history
                 let resume_idx = resume_from.load(Ordering::SeqCst);
-                if let Ok(logs) = logs_clone.read() {
-                    chat_history = logs
-                        .iter()
+                let mut chat_history: Vec<Message> = if let Ok(logs) = logs_clone.read() {
+                    logs.iter()
                         .skip(resume_idx)
                         .cloned()
                         .flat_map(|x| Vec::<Message>::from(x))
-                        .collect::<Vec<_>>();
+                        .collect()
                 } else {
-                    chat_history = vec![];
-                }
-
-                // Prepare message with RAG context
-                let final_message = if let Some(ctx) = rag_context {
-                    format!("{}{}", ctx, message)
-                } else {
-                    message.clone()
+                    vec![]
                 };
+
+                // Inject RAG context as a system-like message at the start of history
+                if let Some(ctx) = rag_context {
+                    chat_history.insert(
+                        0,
+                        Message::User {
+                            content: OneOrMany::one(UserContent::text(format!(
+                                "[Context from earlier conversation]\n{}",
+                                ctx.trim()
+                            ))),
+                        },
+                    );
+                }
 
                 if let Ok(mut logs) = logs_clone.write() {
                     logs.push(TenonLog::new(TenonLogData::User(TenonUserMessage::Text(
@@ -666,7 +671,7 @@ impl ChatSession {
                     ))))
                 }
 
-                let mut stream = agent.stream_chat(final_message, chat_history).await;
+                let mut stream = agent.stream_chat(message, chat_history).await;
                 while let Some(result) = stream.next().await {
                     if cancel_token.load(Ordering::SeqCst) {
                         break;

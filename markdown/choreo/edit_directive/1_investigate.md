@@ -9,7 +9,6 @@
    - What was the agent doing when the problem occurred?
    - What went wrong — what was the actual behavior?
    - What should have happened instead?
-   - Is this a recurring pattern or a one-time occurrence?
 4. Based on the answers, drill into specifics with targeted follow-up questions. Ask one question at a time, waiting for feedback before continuing. Continue until you and the user share a precise understanding of the root cause
    - Walk down each branch of the problem, resolving dependencies one-by-one
    - For each question, provide your recommended answer

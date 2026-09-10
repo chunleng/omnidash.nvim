@@ -135,7 +135,7 @@ impl Tool for AnalyzeImage {
             "Answer based on the image content. No preamble or hedge.",
             None,
         )
-        .map_err(|e| ToolExecutionError::from_error(e))?;
+        .map_err(ToolExecutionError::from_error)?;
 
         let response = worker.chat(message).await.map_err(|e| {
             ToolExecutionError::other(format!("Agent failed to analyze image: {}", e))

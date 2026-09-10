@@ -557,23 +557,20 @@ impl TenonLogData {
                 lines.push(String::new());
                 lines.extend(plain(&log.content));
                 if log.tool_log.tool_call.name == "navigate_choreo" {
-                    match &log.tool_log.tool_result {
-                        Some(Ok(TenonToolResult::Text(text))) => {
-                            let output_text = serde_yaml::from_str::<serde_yaml::Value>(&text.text)
-                                .ok()
-                                .and_then(|parsed| {
-                                    parsed
-                                        .get("artifact")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from)
-                                })
-                                .unwrap_or_else(|| text.text.clone());
-                            lines.push(String::new());
-                            lines.push("### Artifact (Previous Move)".to_string());
-                            lines.push(String::new());
-                            lines.extend(plain(&output_text));
-                        }
-                        _ => {}
+                    if let Some(Ok(TenonToolResult::Text(text))) = &log.tool_log.tool_result {
+                        let output_text = serde_yaml::from_str::<serde_yaml::Value>(&text.text)
+                            .ok()
+                            .and_then(|parsed| {
+                                parsed
+                                    .get("artifact")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from)
+                            })
+                            .unwrap_or_else(|| text.text.clone());
+                        lines.push(String::new());
+                        lines.push("### Artifact (Previous Move)".to_string());
+                        lines.push(String::new());
+                        lines.extend(plain(&output_text));
                     }
                 } else if log.tool_log.tool_call.name == "end_choreo" {
                     // end_choreo carries its artifact in the call args, not the result

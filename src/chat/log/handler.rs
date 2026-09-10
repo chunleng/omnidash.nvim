@@ -79,7 +79,7 @@ impl ChatLogHandler {
             indexer.apply_context_truncation(&mut log_window);
             let log_window_clone = log_window.clone();
             drop(log_window);
-            indexer.retrieve_chatlog_with_context(log_window_clone, &user_message)
+            indexer.retrieve_chatlog_with_context(log_window_clone, user_message)
         } else {
             Vec::new()
         }

@@ -141,6 +141,8 @@ impl ChatLogRenderer {
     }
 }
 
+// 8 args: buffer edit range + sign styling + lines; splitting hurts readability
+#[allow(clippy::too_many_arguments)]
 fn update_buffer(
     buffer: &mut api::Buffer,
     ns: u32,

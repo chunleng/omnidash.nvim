@@ -292,6 +292,8 @@ impl NeovimExecutionHandler {
 
 /// Encapsulates the resolve-once pattern for `execute_rust_on_main_thread_async`.
 /// Clones share the same cell, so resolving from any clone prevents all others.
+// FnOnce box in mutex; a type alias would leak into public API for one use
+#[allow(clippy::type_complexity)]
 pub struct Resolver<T> {
     cell: Arc<Mutex<Option<Box<dyn FnOnce(OxiResult<T>) + Send>>>>,
 }

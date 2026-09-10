@@ -300,7 +300,7 @@ impl ChatLogCache {
 
             return (updates, current_line);
         }
-        return (Vec::new(), 0);
+        (Vec::new(), 0)
     }
 }
 

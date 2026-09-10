@@ -29,7 +29,7 @@ pub fn get_openai_completion_api_agent(
 ) -> Agent {
     let api_key = config.api_key.resolve().unwrap_or_else(|e| {
         crate::utils::GLOBAL_EXECUTION_HANDLER
-            .notify_on_main_thread(format!("{}", e), nvim_oxi::api::types::LogLevel::Error);
+            .notify_on_main_thread(e.to_string(), nvim_oxi::api::types::LogLevel::Error);
         String::new()
     });
     let client = openai::Client::builder()
@@ -65,7 +65,7 @@ pub fn get_openai_response_api_agent(
 ) -> Agent {
     let api_key = config.api_key.resolve().unwrap_or_else(|e| {
         crate::utils::GLOBAL_EXECUTION_HANDLER
-            .notify_on_main_thread(format!("{}", e), nvim_oxi::api::types::LogLevel::Error);
+            .notify_on_main_thread(e.to_string(), nvim_oxi::api::types::LogLevel::Error);
         String::new()
     });
     let client = openai::Client::builder()

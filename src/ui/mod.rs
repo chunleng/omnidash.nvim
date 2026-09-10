@@ -1004,7 +1004,7 @@ fn chat_window_loop(
 
             let chat_key_for_push = chat_key.clone();
             let push_result = GLOBAL_EXECUTION_HANDLER.execute_rust_on_main_thread(move || {
-                if api::get_mode().mode.to_string() == "i" {
+                if api::get_mode().mode == "i" {
                     let _ = api::command("stopinsert");
                 }
 
@@ -1047,10 +1047,10 @@ fn chat_window_loop(
             let should_scroll = match outcome {
                 QuestionOutcome::Resolved => {
                     // Widget already sent the response through response_tx.
-                    if let Ok(loaded_guard) = loaded_chat_session.read() {
-                        if let Ok(session) = loaded_guard.read() {
-                            session.pending_actions_channel.mark_done();
-                        }
+                    if let Ok(loaded_guard) = loaded_chat_session.read()
+                        && let Ok(session) = loaded_guard.read()
+                    {
+                        session.pending_actions_channel.mark_done();
                     }
                     true
                 }

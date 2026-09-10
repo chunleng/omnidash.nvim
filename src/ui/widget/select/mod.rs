@@ -66,7 +66,7 @@ impl SelectWidget {
             for mode in &keymap.modes {
                 buffer
                     .inner
-                    .set_keymap(mode.clone(), &keymap.lhs, &keymap.rhs, &keymap.opts)?;
+                    .set_keymap(*mode, &keymap.lhs, &keymap.rhs, &keymap.opts)?;
             }
         }
 
@@ -114,15 +114,11 @@ impl SelectWidget {
                 let idx = ranges_for_cr
                     .iter()
                     .position(|(start, end, _)| row >= *start && row <= *end);
-                match idx {
-                    Some(idx) => {
-                        if let Some(mut guard) = cr_on_select.lock().ok()
-                            && let Some(handler) = guard.take()
-                        {
-                            handler(idx);
-                        }
-                    }
-                    None => {}
+                if let Some(idx) = idx
+                    && let Some(mut guard) = cr_on_select.lock().ok()
+                    && let Some(handler) = guard.take()
+                {
+                    handler(idx);
                 }
             });
             let cr_opts = SetKeymapOpts::builder().callback(cr_callback).build();

@@ -425,7 +425,7 @@ fn select_history_fn() -> Function<(), ()> {
                                 .map(|(dt, _)| dt.replace('T', " "))
                                 .unwrap_or_else(|| h.id.clone());
                         let title = h.title.as_deref().unwrap_or("Untitled");
-                        let messages = h.logs.iter().count();
+                        let messages = h.logs.len();
                         format!(
                             "{} │ {:>3} msg │ {} (󰚩  {}, {})",
                             datetime, messages, title, h.agent_name, h.model_display

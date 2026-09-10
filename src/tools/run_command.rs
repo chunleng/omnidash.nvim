@@ -131,6 +131,13 @@ async fn check_command_safety_with_llm(
         Some(model.clone()),
         r#"Judge command safety. Output YAML only.
 
+Step 1 - Extract the subject:
+- Default: the whole command.
+- Inline code: command is an interpreter with an inline-code flag (python3 -c, node -e, ruby -e, perl -e, php -r, ...) → subject is the inline code only.
+- Fallback: script files (python3 script.py), extra flags, or unrecognized forms → subject is the whole command.
+
+Step 2 - Test the subject against the patterns. For code subjects, interpret patterns against code operations (open() read → read files; os.remove → delete; requests/urllib → network; eval/exec → code exec).
+
 DENY patterns:
 - Secrets: env vars (*KEY*, *SECRET*, *TOKEN*, *API*), files (.env, id_rsa, credentials, .pem)
 - System modify: install packages, system config, services
@@ -149,7 +156,11 @@ ALLOW patterns:
 - Info: which, whereis, echo
 - Pure utilities (no side effects): sleep, date, wc, sort, jq, stat, du, ps, basename, realpath, sha256sum, base64
 
-Judge by similarity to patterns above. Commands matching DENY patterns → deny. Commands matching ALLOW patterns → allow. When uncertain, deny.
+Code subject gate: allow only if BOTH hold:
+1. Fully traceable: you can enumerate every operation the code performs. Deny dynamic execution (eval, exec, getattr, compile, __import__), obfuscated payloads (base64/char-code), or code not straightforward to analyze
+2. Stdlib imports only: no third-party imports (importing runs module-level code)
+
+Judge by similarity to patterns above. Subject matching DENY patterns → deny. Subject matching ALLOW patterns → allow. When uncertain, deny.
 
 Output (allow):
 decision: allow

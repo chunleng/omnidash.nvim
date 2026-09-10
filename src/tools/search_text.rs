@@ -80,11 +80,11 @@ impl Tool for SearchText {
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory to search. Default=cwd"
+                    "description": "Directory to search. cwd if omitted"
                 },
                 "glob": {
                     "type": "string",
-                    "description": "File filter. `**/*.rs` matches recursively in all subdirs; `*.rs` matches files directly under path. Default='**/*'"
+                    "description": "File filter. `**/*.rs` matches recursively in all subdirs; `*.rs` matches files directly under path. All files if omitted"
                 },
                 "is_regex": {
                     "type": "boolean",
@@ -92,15 +92,17 @@ impl Tool for SearchText {
                 },
                 "ignore_case": {
                     "type": "boolean",
-                    "description": "Case-insensitive search. Default=false"
+                    "description": "Case-insensitive search",
+                    "default": false
                 },
                 "context_lines": {
                     "type": "number",
-                    "description": "Lines before+after match. Default=0"
+                    "description": "Lines before+after match",
+                    "default": 0
                 },
                 "max_files": {
                     "type": "integer",
-                    "description": "Max files returned. Default=all"
+                    "description": "Max files returned. All files if omitted"
                 }
             },
             "required": ["pattern", "is_regex"]

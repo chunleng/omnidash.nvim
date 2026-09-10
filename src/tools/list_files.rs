@@ -41,15 +41,17 @@ impl Tool for ListFiles {
                 },
                 "path": {
                     "type": "string",
-                    "description": "Search dir. Default=cwd"
+                    "description": "Search dir. cwd if omitted"
                 },
                 "show_gitignored": {
                     "type": "boolean",
-                    "description": "Include gitignored. Default=false"
+                    "description": "Include gitignored",
+                    "default": false
                 },
                 "max_count": {
                     "type": "integer",
-                    "description": "Max results. Default=20"
+                    "description": "Max results",
+                    "default": 20
                 }
             },
             "required": ["pattern"]

@@ -307,11 +307,12 @@ impl Tool for RunCommand {
                 },
                 "cwd": {
                     "type": "string",
-                    "description": "Working dir. Default: cwd."
+                    "description": "Working dir. cwd if omitted."
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout (sec). Default: 30."
+                    "description": "Timeout (sec).",
+                    "default": 30
                 },
                 "filter": {
                     "type": "string",

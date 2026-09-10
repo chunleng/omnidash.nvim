@@ -36,11 +36,12 @@ impl Tool for ReadFile {
                 },
                 "start_line": {
                     "type": "number",
-                    "description": "Start line (1-based). Default: 1"
+                    "description": "Start line (1-based)",
+                    "default": 1
                 },
                 "end_line": {
                     "type": "number",
-                    "description": "End line (1-based, inclusive). Default: EOF"
+                    "description": "End line (1-based, inclusive). EOF if omitted"
                 }
             },
             "required": ["filepath"]

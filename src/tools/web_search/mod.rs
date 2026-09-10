@@ -95,7 +95,8 @@ impl Tool for WebSearch {
                 },
                 "count": {
                     "type": "integer",
-                    "description": "Results count. Default: 5"
+                    "description": "Results count",
+                    "default": 5
                 },
                 "region": {
                     "type": "string",

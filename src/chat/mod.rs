@@ -2,7 +2,7 @@ use crate::agent::engine::{AgenticAgentType, AgenticStreamEngine};
 use crate::chat::helpers::TitleHandler;
 use crate::chat::history::{SessionMetadata, save_to_history};
 use crate::get_application_config;
-use crate::tools::ask_question::QuestionResult;
+use crate::tools::ask_question::{AskQuestionOption, QuestionResult};
 use crate::tools::resolve_tools;
 use chrono::{DateTime, Local};
 use nvim_oxi::Result as OxiResult;
@@ -88,7 +88,7 @@ impl ActiveChoreo {
 pub enum PendingAction {
     Question {
         question: String,
-        options: Vec<String>,
+        options: Vec<AskQuestionOption>,
         response_tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<QuestionResult>>>>,
     },
 }

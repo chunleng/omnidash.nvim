@@ -5,7 +5,7 @@ use tokio::sync::oneshot;
 
 use super::SelectWidget;
 use crate::chat::PendingAction;
-use crate::tools::ask_question::{ANSWER_BY_CHAT, QuestionResult};
+use crate::tools::ask_question::{ANSWER_BY_CHAT, AskQuestionOption, QuestionResult};
 use crate::ui::{
     nvim_primitives::buffer::{NvimBuffer, NvimKeymap},
     widget::Widget,
@@ -63,18 +63,25 @@ impl QuestionWidget {
 
         let shared_completion = Arc::new(Mutex::new(Some(completion_tx)));
 
-        let mut all_option_texts = options;
-        all_option_texts.push(ANSWER_BY_CHAT.to_string());
+        let mut all_options = options;
+        all_options.push(AskQuestionOption {
+            text: ANSWER_BY_CHAT.to_string(),
+            recommended: false,
+        });
 
-        let question_options: Vec<QuestionOption> = all_option_texts
+        let question_options: Vec<QuestionOption> = all_options
             .into_iter()
             .map(|opt| {
                 let resp_tx = Arc::clone(&response_tx);
                 let comp = Arc::clone(&shared_completion);
-                let opt_text = opt.clone();
+                let opt_text = if opt.recommended {
+                    format!("★ {}", opt.text)
+                } else {
+                    opt.text.clone()
+                };
 
                 QuestionOption {
-                    text: opt,
+                    text: opt.text,
                     handler: Box::new(move || {
                         send_result(&resp_tx, Some(opt_text));
                         signal_completion(&comp);

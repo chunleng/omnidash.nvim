@@ -19,7 +19,16 @@ pub struct QuestionResult {
 #[serde(deny_unknown_fields)]
 pub struct AskQuestionArgs {
     pub question: String,
-    pub options: Vec<String>,
+    pub options: Vec<AskQuestionOption>,
+}
+
+/// An answer choice.
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AskQuestionOption {
+    pub text: String,
+    #[serde(default)]
+    pub recommended: bool,
 }
 
 pub struct AskQuestion {
@@ -51,9 +60,19 @@ impl Tool for AskQuestion {
                 },
                 "options": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Answer choices. Prefix with '★' to mark recommended. \
-                        Every option must be a genuine, distinct choice. \
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "recommended": {
+                                "type": "boolean",
+                                "description": "Mark option as good default choice",
+                                "default": false
+                            }
+                        },
+                        "required": ["text"]
+                    },
+                    "description": "Answer choices. Every option must be a genuine, distinct choice. \
                         Never add an option that just leads back to typing \
                         (e.g. \"Something else\", \"Others\")"
                 }

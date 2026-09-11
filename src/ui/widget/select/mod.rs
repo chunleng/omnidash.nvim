@@ -87,6 +87,18 @@ impl SelectWidget {
             }
         }
 
+        // Highlight the title lines. Own namespace so the hover autocmd below,
+        // which clears its namespace on CursorMoved, never removes it.
+        if title_line_count > 0 {
+            let title_ns = api::create_namespace("TenonSelectTitle");
+            let opts = SetExtmarkOpts::builder()
+                .end_row(title_line_count - 1)
+                .line_hl_group("TenonLineSelectTitle")
+                .hl_eol(true)
+                .build();
+            let _ = buffer.inner.set_extmark(title_ns, 0, 0, &opts);
+        }
+
         // Apply base keymaps first; SelectWidget's own <cr>/<c-c> below override on conflict.
         for keymap in base_keymaps {
             for mode in &keymap.modes {

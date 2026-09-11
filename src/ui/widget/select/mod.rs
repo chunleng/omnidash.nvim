@@ -9,6 +9,7 @@ use nvim_oxi::{
     },
 };
 
+use crate::tools::ask_question::AskQuestionOption;
 use crate::ui::{
     nvim_primitives::buffer::{NvimBuffer, NvimBufferOption, NvimKeymap},
     widget::Widget,
@@ -16,7 +17,8 @@ use crate::ui::{
 
 pub mod question;
 
-/// A generic selection widget that displays a title followed by a list of options.
+/// A selection widget that displays a title followed by a list of options.
+/// Recommended options are marked with a star sign in the sign column.
 /// Supports hover highlighting and selection via `<cr>` / `<c-c>` callbacks.
 #[derive(Clone)]
 pub struct SelectWidget {
@@ -26,7 +28,7 @@ pub struct SelectWidget {
 impl SelectWidget {
     pub fn new(
         title: &str,
-        options: &[String],
+        options: &[AskQuestionOption],
         on_select: Option<Box<dyn FnOnce(usize) + Send + Sync>>,
         on_cancel: Option<Box<dyn FnOnce() + Send + Sync>>,
         base_keymaps: Vec<NvimKeymap>,
@@ -41,12 +43,12 @@ impl SelectWidget {
         let mut option_ranges = Vec::new();
         let mut current_line = title_line_count + 2; // 1-indexed: title lines + blank
         for option in options {
-            let option_line_count = option.lines().count().max(1);
+            let option_line_count = option.text.lines().count().max(1);
             let start = current_line;
             let end = current_line + option_line_count - 1;
-            option_ranges.push((start, end, option.clone()));
+            option_ranges.push((start, end, option.text.clone()));
             current_line = end + 1;
-            lines.extend(option.lines().map(String::from));
+            lines.extend(option.text.lines().map(String::from));
         }
 
         let mut buffer = NvimBuffer::new(NvimBufferOption {
@@ -60,6 +62,19 @@ impl SelectWidget {
             .buf(buffer.inner.clone())
             .build();
         api::set_option_value("modifiable", false, &buf_opts)?;
+
+        // Recommended options get a star sign. Own namespace so the hover autocmd
+        // below, which clears its namespace on CursorMoved, never removes them.
+        let sign_ns = api::create_namespace("TenonSelectSign");
+        for ((start, _, _), option) in option_ranges.iter().zip(options) {
+            if option.recommended {
+                let opts = SetExtmarkOpts::builder()
+                    .sign_text("★")
+                    .sign_hl_group("TenonSignSelectRecommended")
+                    .build();
+                let _ = buffer.inner.set_extmark(sign_ns, start - 1, 0, &opts);
+            }
+        }
 
         // Apply base keymaps first; SelectWidget's own <cr>/<c-c> below override on conflict.
         for keymap in base_keymaps {

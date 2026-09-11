@@ -11,12 +11,6 @@ use crate::ui::{
     widget::Widget,
 };
 
-/// A selectable option with an associated handler fired on selection.
-struct QuestionOption {
-    text: String,
-    handler: Box<dyn FnOnce() + Send + Sync>,
-}
-
 /// Sends a `QuestionResult` through `response_tx`. First caller wins via
 /// `Mutex<Option<...>>::take()`.
 pub(crate) fn send_result(
@@ -69,24 +63,16 @@ impl QuestionWidget {
             recommended: false,
         });
 
-        let question_options: Vec<QuestionOption> = all_options
-            .into_iter()
+        let handlers: Vec<Option<Box<dyn FnOnce() + Send + Sync>>> = all_options
+            .iter()
             .map(|opt| {
                 let resp_tx = Arc::clone(&response_tx);
                 let comp = Arc::clone(&shared_completion);
-                let opt_text = if opt.recommended {
-                    format!("★ {}", opt.text)
-                } else {
-                    opt.text.clone()
-                };
-
-                QuestionOption {
-                    text: opt.text,
-                    handler: Box::new(move || {
-                        send_result(&resp_tx, Some(opt_text));
-                        signal_completion(&comp);
-                    }),
-                }
+                let text = opt.text.clone();
+                Some(Box::new(move || {
+                    send_result(&resp_tx, Some(text));
+                    signal_completion(&comp);
+                }) as Box<dyn FnOnce() + Send + Sync>)
             })
             .collect();
 
@@ -97,19 +83,14 @@ impl QuestionWidget {
             signal_completion(&cancel_comp);
         }));
 
-        let texts: Vec<String> = question_options.iter().map(|o| o.text.clone()).collect();
-        let handlers: Vec<Option<Box<dyn FnOnce() + Send + Sync>>> = question_options
-            .into_iter()
-            .map(|o| Some(o.handler))
-            .collect();
-
         let on_select: Option<Box<dyn FnOnce(usize) + Send + Sync>> = Some(Box::new(move |idx| {
             if let Some(handler) = handlers.into_iter().nth(idx).flatten() {
                 handler();
             }
         }));
 
-        let select = SelectWidget::new(&question, &texts, on_select, on_cancel, base_keymaps)?;
+        let select =
+            SelectWidget::new(&question, &all_options, on_select, on_cancel, base_keymaps)?;
 
         Ok(Self { select })
     }

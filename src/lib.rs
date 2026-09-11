@@ -2,19 +2,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
-use nvim_oxi::{
-    Dictionary, Function, Object, Result as OxiResult, api::types::LogLevel, mlua::lua,
-    serde::Deserializer,
-};
-use serde::Deserialize;
+use nvim_oxi::{Dictionary, Result as OxiResult, mlua::lua};
 
 use crate::{
-    chat::choreo::Choreo,
-    config::{TenonConfig, user::TenonUserConfig},
-    directive::Directive,
-    lua_modules::{action::create_lua_action_module, keymap::create_lua_keymap_module},
-    ui::ChatWindow,
-    utils::{GLOBAL_EXECUTION_HANDLER, notify},
+    chat::choreo::Choreo, config::TenonConfig, directive::Directive,
+    lua_modules::create_lua_module, ui::ChatWindow, utils::GLOBAL_EXECUTION_HANDLER,
 };
 
 pub static CHAT_WINDOW: OnceLock<Arc<Mutex<ChatWindow>>> = OnceLock::new();
@@ -98,69 +90,5 @@ fn tenon() -> OxiResult<Dictionary> {
         PathBuf::from(path)
     });
 
-    let open_fn = Function::from_fn_mut({
-        move |()| {
-            if let Ok(mut win) = get_chat_window().lock() {
-                let _ = win.open();
-            }
-        }
-    });
-
-    let setup_fn = Function::from_fn_mut({
-        |conf: Object| {
-            if CONFIG.get().is_some() {
-                notify(
-                    "[tenon.nvim] setup() called after config already initialized; ignoring",
-                    LogLevel::Warn,
-                );
-                return;
-            }
-            CONFIG.get_or_init(|| {
-                match TenonUserConfig::deserialize(Deserializer::new(conf))
-                    .map_err(|e| e.into())
-                    .and_then(TenonConfig::try_from)
-                {
-                    Ok(res) => res,
-                    Err(e) => {
-                        notify(
-                            format!("[tenon.nvim] error reading config: {}", e),
-                            LogLevel::Error,
-                        );
-                        notify("[tenon.nvim] using default config", LogLevel::Warn);
-                        TenonConfig::default()
-                    }
-                }
-            });
-        }
-    });
-
-    let toggle_fn = Function::from_fn({
-        move |()| {
-            if let Ok(mut win) = get_chat_window().lock()
-                && let Err(e) = win.toggle()
-            {
-                notify(format!("{}", e), LogLevel::Error);
-            }
-        }
-    });
-
-    let close_fn = Function::from_fn({
-        move |()| {
-            if let Ok(mut win) = get_chat_window().lock()
-                && let Err(e) = win.close()
-            {
-                notify(format!("{}", e), LogLevel::Error);
-            }
-        }
-    });
-
-    let mut module = Dictionary::new();
-    module.insert("setup", Object::from(setup_fn));
-    module.insert("open", Object::from(open_fn));
-    module.insert("toggle", Object::from(toggle_fn));
-    module.insert("close", Object::from(close_fn));
-    module.insert("keymap", Object::from(create_lua_keymap_module()));
-    module.insert("action", Object::from(create_lua_action_module()));
-
-    Ok(module)
+    Ok(create_lua_module())
 }

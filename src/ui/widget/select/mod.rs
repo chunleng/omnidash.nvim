@@ -18,7 +18,8 @@ use crate::ui::{
 pub mod question;
 
 /// A selection widget that displays a title followed by a list of options.
-/// Recommended options are marked with a star sign in the sign column.
+/// Each option gets a bullet sign; recommended options additionally get a
+/// star sign in the sign column.
 /// Supports hover highlighting and selection via `<cr>` / `<c-c>` callbacks.
 #[derive(Clone)]
 pub struct SelectWidget {
@@ -63,14 +64,24 @@ impl SelectWidget {
             .build();
         api::set_option_value("modifiable", false, &buf_opts)?;
 
-        // Recommended options get a star sign. Own namespace so the hover autocmd
-        // below, which clears its namespace on CursorMoved, never removes them.
+        // Every option gets a bullet sign; recommended options additionally get
+        // a star sign. Signs on a line render highest-priority first (leftmost),
+        // so the bullet outranks the star to appear left of it. Own namespace so
+        // the hover autocmd below, which clears its namespace on CursorMoved,
+        // never removes them.
         let sign_ns = api::create_namespace("TenonSelectSign");
         for ((start, _, _), option) in option_ranges.iter().zip(options) {
+            let opts = SetExtmarkOpts::builder()
+                .sign_text("⁃")
+                .sign_hl_group("TenonSignSelectBullet")
+                .priority(20)
+                .build();
+            let _ = buffer.inner.set_extmark(sign_ns, start - 1, 0, &opts);
             if option.recommended {
                 let opts = SetExtmarkOpts::builder()
-                    .sign_text("★")
+                    .sign_text("*")
                     .sign_hl_group("TenonSignSelectRecommended")
+                    .priority(10)
                     .build();
                 let _ = buffer.inner.set_extmark(sign_ns, start - 1, 0, &opts);
             }

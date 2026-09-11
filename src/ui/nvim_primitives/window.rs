@@ -154,6 +154,28 @@ impl NvimWindow {
         }
     }
 
+    /// Toggles the `number` and `relativenumber` window options. Best-effort:
+    /// errors are ignored since the window may be closed while a question is
+    /// pending.
+    pub fn set_line_numbers(&self, enabled: bool) {
+        let Some(window) = self.get_window() else {
+            return;
+        };
+        let win_opts = OptionOpts::builder().win(window).build();
+        let _ = api::set_option_value("number", enabled, &win_opts);
+        let _ = api::set_option_value("relativenumber", enabled, &win_opts);
+    }
+
+    /// Sets the `signcolumn` window option. Best-effort: errors are ignored
+    /// since the window may be closed while a question is pending.
+    pub fn set_sign_column(&self, value: &str) {
+        let Some(window) = self.get_window() else {
+            return;
+        };
+        let win_opts = OptionOpts::builder().win(window).build();
+        let _ = api::set_option_value("signcolumn", value, &win_opts);
+    }
+
     /// Moves the cursor to the last character of the last line and snaps the
     /// view so the last line is visible at the bottom of the window.
     ///

@@ -1015,9 +1015,12 @@ fn chat_window_loop(
                 if let Ok(win) = chat_window.lock()
                     && let Ok(mut input_panel) = win.input_window.lock()
                     && let Some(panel) = input_panel.as_mut()
-                    && let Err(e) = panel.push_widget(&chat_key_for_push, Box::new(widget))
                 {
-                    return Err(e);
+                    panel.push_widget(&chat_key_for_push, Box::new(widget))?;
+                    // Hide line numbers and widen the sign column while the
+                    // question widget is on top.
+                    panel.window.set_line_numbers(false);
+                    panel.window.set_sign_column("yes:2");
                 }
                 Ok(())
             });
@@ -1063,6 +1066,10 @@ fn chat_window_loop(
                         && let Some(panel) = input_panel.as_mut()
                     {
                         let _ = panel.pop_widget(&chat_key.clone());
+                        // Restore line numbers and sign column for the chat
+                        // input below.
+                        panel.window.set_line_numbers(true);
+                        panel.window.set_sign_column("auto");
                     }
                     if should_scroll {
                         let _ = win.scroll_output_to_bottom();
